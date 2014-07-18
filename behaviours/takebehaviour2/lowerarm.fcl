@@ -1,0 +1,34 @@
+FUNCTION BLOCK
+
+VAR_INPUT
+angle:REAL;
+END_VAR
+
+FUZZIFY angle
+TERM center := Triangular(-7.0 0.0 7.0)
+TERM farright := Shoulder right(7.0 20.0)
+TERM left := Triangular(-20.0 -7.0 0.0)
+TERM farleft := Shoulder left(-20.0 -7.0)
+TERM right := Triangular(0.0 7.0 20.0)
+END_FUZZIFY
+
+VAR_OUTPUT
+dangle:REAL;
+END_VAR
+
+DEFUZZIFY dangle
+TERM turnrightfast := -4.0
+TERM stay := 0.0
+TERM turnleftfast := 4.0
+TERM turnrightslow := -2
+TERM turnleftslow := 2
+END_DEFUZZIFY
+
+RULEBLOCK
+RULE 1:if angle is farleft then dangle is turnrightfast
+RULE 2:if angle is left then dangle is turnrightslow
+RULE 3:if angle is center then dangle is stay
+RULE 4:if angle is right then dangle is turnleftslow
+RULE 5:if angle is farright then dangle is turnleftfast
+END_RULEBLOCK
+END_FUNCTIONBLOCK

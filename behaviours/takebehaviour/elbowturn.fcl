@@ -1,0 +1,44 @@
+FUNCTION_BLOCK 
+
+VAR_INPUT
+Angle: REAL;
+Location: REAL;
+END_VAR
+
+FUZZIFY Angle
+TERM LOW := Shoulder left(-20 10);
+TERM LEVEL := Triangular (-20 10 40);
+TERM HIGH := Shoulder right(10 40);
+END_FUZZIFY
+
+FUZZIFY Location
+TERM BEHIND := Shoulder left(-3 0);
+TERM AT := Triangular (-3 0 3);
+TERM INFRONT := Shoulder right(0 3.5);
+END_FUZZIFY
+
+VAR_OUTPUT
+AngularVelocity: REAL
+END_VAR
+
+DEFUZZIFY AngularVelocity
+TERM FASTDOWN := Triangular (-1.5 -1 -0.5);
+TERM DOWN := Triangular (-1 -0.5 0);
+TERM STAY := Triangular (-0.5 0 0.5);
+TERM UP := Triangular (0 0.5 1);
+TERM FASTUP := Triangular (0.5 1 1.5);
+END_DEFUZZIFY
+
+RULEBLOCK 
+  RULE 1: if Angle is LOW && Location is AT then AngularVelocity is UP;
+  RULE 2: if Angle is LEVEL && Location is AT then AngularVelocity is STAY;
+  RULE 3: if Angle is HIGH && Location is AT then AngularVelocity is DOWN;
+  RULE 4: if Angle is LOW && Location is BEHIND then AngularVelocity is DOWN;
+  RULE 5: if Angle is LEVEL && Location is BEHIND then AngularVelocity is DOWN;
+  RULE 6: if Angle is HIGH && Location is BEHIND then AngularVelocity is FASTDOWN;
+  RULE 7: if Angle is LOW && Location is INFRONT then AngularVelocity is UP;
+  RULE 8: if Angle is LEVEL && Location is INFRONT then AngularVelocity is UP;
+  RULE 9: if Angle is HIGH && Location is INFRONT then AngularVelocity is FASTUP;
+END_RULEBLOCK
+
+END_FUNCTION_BLOCK

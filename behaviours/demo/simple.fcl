@@ -1,0 +1,28 @@
+FUNCTION BLOCK
+
+VAR_INPUT
+angle:REAL;
+END_VAR
+
+FUZZIFY angle
+TERM center := Triangular(-7.0 0.0 7.0)
+TERM right := Shoulder right(0.0 7.0)
+TERM left := Shoulder left(-7.0 0.0)
+END_FUZZIFY
+
+VAR_OUTPUT
+dangle:REAL;
+END_VAR
+
+DEFUZZIFY dangle
+TERM turnright := -3.0
+TERM stay := 0.0
+TERM turnleft := +3.0
+END_DEFUZZIFY
+
+RULEBLOCK
+RULE 1:if angle is left then dangle is turnright
+RULE 2:if angle is center then dangle is stay
+RULE 3:if angle is right then dangle is turnleft
+END_RULEBLOCK
+END_FUNCTIONBLOCK
