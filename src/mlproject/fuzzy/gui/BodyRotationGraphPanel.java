@@ -13,15 +13,11 @@ import java.awt.event.ActionListener;
 import java.awt.geom.GeneralPath;
 import java.io.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.Timer;
 import mlproject.animation.Bone;
 import mlproject.animation.SampleSymbol;
-import org.apache.batik.dom.GenericDOMImplementation;
-import org.apache.batik.svggen.SVGGraphics2D;
-import org.apache.batik.svggen.SVGGraphics2DIOException;
 import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.Document;
 
@@ -285,6 +281,7 @@ public class BodyRotationGraphPanel extends javax.swing.JPanel implements Action
     }
 
     public void recordGraph() {
+        /*
         Writer out = null;
         try {
             // TODO add your handling code here:
@@ -320,7 +317,7 @@ public class BodyRotationGraphPanel extends javax.swing.JPanel implements Action
                 Logger.getLogger(FuzzyVariableGUI.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-
+        */
     }
 
     /**

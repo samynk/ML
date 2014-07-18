@@ -38,9 +38,6 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import mlproject.fuzzy.FuzzyVariable;
 import mlproject.fuzzy.MemberShip;
-import org.apache.batik.dom.GenericDOMImplementation;
-import org.apache.batik.svggen.SVGGraphics2D;
-import org.apache.batik.svggen.SVGGraphics2DIOException;
 import org.w3c.dom.DOMImplementation;
 import org.w3c.dom.Document;
 
@@ -317,6 +314,7 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
     }//GEN-LAST:event_formComponentResized
 
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
+        /*
         Writer out = null;
         try {
             // TODO add your handling code here:
@@ -354,6 +352,7 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
                 Logger.getLogger(FuzzyVariableGUI.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        */
     }//GEN-LAST:event_jButton2ActionPerformed
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton2;
