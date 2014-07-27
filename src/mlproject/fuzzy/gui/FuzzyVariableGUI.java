@@ -94,6 +94,7 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
         }
 
         invalidate();
+        repaint();
     }
     private BufferedImage hatchImage;
     private Rectangle2D hatchRectangle;
