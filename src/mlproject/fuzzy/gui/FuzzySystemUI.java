@@ -12,10 +12,8 @@ package mlproject.fuzzy.gui;
 
 import java.awt.GridBagConstraints;
 import javax.swing.JLabel;
-import javax.swing.JTextPane;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import mlproject.fuzzy.FuzzyRule;
 import mlproject.fuzzy.FuzzySystem;
 import mlproject.fuzzy.FuzzyVariable;
 import mlproject.fuzzy.LeftSigmoidMemberShip;
@@ -235,7 +233,7 @@ public class FuzzySystemUI extends javax.swing.JPanel implements ChangeListener 
         fuzzyRulePanel1.setFuzzySystem(system);
     }
 
-    FuzzySystem getFuzzySystem() {
+    public FuzzySystem getFuzzySystem() {
         return this.system;
     }
 }
