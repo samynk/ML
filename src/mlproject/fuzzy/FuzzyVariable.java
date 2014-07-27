@@ -213,4 +213,11 @@ public class FuzzyVariable {
     public float getInputValue() {
         return this.inputValue;
     }
+    /**
+     * Returns a string representation of this FuzzyVariable
+     */
+    @Override
+    public String toString(){
+        return name;
+    }
 }
