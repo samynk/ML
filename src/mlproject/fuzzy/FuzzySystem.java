@@ -18,6 +18,7 @@ public class FuzzySystem {
 
     private String name;
     private HashMap<String, FuzzyVariable> fuzzyInputs;
+    private ArrayList<FuzzyVariable> fuzzyInputList;
     private HashMap<String, FuzzyVariable> fuzzyOutputs;
     private ArrayList<FuzzyRule> fuzzyRules;
     private FuzzyRuleBlock[] fuzzyRuleBlocks;
@@ -28,6 +29,7 @@ public class FuzzySystem {
     public FuzzySystem(String name) {
         this.name = name;
         fuzzyInputs = new HashMap<>();
+        fuzzyInputList = new ArrayList<>();
         fuzzyOutputs = new HashMap<>();
         fuzzyRules = new ArrayList<>();
         fuzzyRuleBlocks = new FuzzyRuleBlock[1];
@@ -43,6 +45,11 @@ public class FuzzySystem {
 
     public void addFuzzyInput(FuzzyVariable input) {
         fuzzyInputs.put(input.getName().toLowerCase(), input);
+        fuzzyInputList.add(input);
+    }
+    
+    public FuzzyVariable getFuzzyInputAt(int index){
+        return fuzzyInputList.get(index);
     }
 
     public void addFuzzyOutput(FuzzyVariable output) {
@@ -51,6 +58,14 @@ public class FuzzySystem {
 
     public FuzzyVariable getFuzzyInputVariable(String variable) {
         return fuzzyInputs.get(variable.toLowerCase());
+    }
+    
+    public boolean hasFuzzyInputVariable(String variable){
+        return fuzzyInputs.containsKey(variable);
+    }
+    
+    public int getInputIndex(FuzzyVariable fv){
+        return fuzzyInputList.indexOf(fv);
     }
 
     public FuzzyVariable getFuzzyOutputVariable(String variable) {
