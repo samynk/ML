@@ -220,4 +220,25 @@ public class FuzzyVariable {
     public String toString(){
         return name;
     }
+
+    public void removeMemberShip(MemberShip ms) {
+        this.memberShipFunctions.remove(ms.getName());
+    }
+
+    public void renameMemberShip(String name, String newName) {
+        MemberShip ms = memberShipFunctions.get(name);
+        if ( ms != null){
+            memberShipFunctions.remove(name);
+            memberShipFunctions.put(newName, ms);
+        }
+    }
+
+    /**
+     * Checks if a membership exist in this variable.
+     * @param name the name to check.
+     * @return true if the membership exists, false otherwise.
+     */
+    public boolean hasMemberShip(String name) {
+        return memberShipFunctions.containsKey(name);
+    }
 }
