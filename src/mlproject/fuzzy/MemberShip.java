@@ -5,6 +5,9 @@
 package mlproject.fuzzy;
 
 import java.awt.Color;
+import java.util.ArrayList;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 /**
  *
@@ -15,9 +18,35 @@ public class MemberShip implements Cloneable {
     private String name;
     private FuzzyVariable parent;
     private float inputTestValue;
+    private ArrayList<ChangeListener> listeners;
+    private ChangeEvent changeEvent;
 
     public MemberShip(String name) {
         this.name = name.toLowerCase();
+        changeEvent = new ChangeEvent(this);
+    }
+
+    public void addChangeListener(ChangeListener cl) {
+        if (listeners == null) {
+            listeners = new ArrayList<>();
+
+        }
+        listeners.add(cl);
+    }
+
+    public void removeChangeListener(ChangeListener cl) {
+        if (listeners == null) {
+            return;
+        }
+        listeners.remove(cl);
+    }
+
+    protected void notifyListeners() {
+        if (listeners != null) {
+            for (ChangeListener cl : listeners) {
+                cl.stateChanged(changeEvent);
+            }
+        }
     }
 
     public float evaluate(float x) {
@@ -26,6 +55,29 @@ public class MemberShip implements Cloneable {
 
     public String getName() {
         return name;
+    }
+
+    /**
+     * Sets the name of this membership.
+     */
+    public void setName(String newName) {
+        if (checkName(newName)) {
+            if (parent != null) {
+                parent.renameMemberShip(name, newName);
+            }
+            this.name = newName;
+            notifyListeners();
+        }
+    }
+
+    public boolean checkName(String name) {
+        if (name.length() == 0) {
+            return false;
+        } else if (parent != null) {
+            return !parent.hasMemberShip(name);
+        } else {
+            return true;
+        }
     }
 
     public float getMinimumX() {
