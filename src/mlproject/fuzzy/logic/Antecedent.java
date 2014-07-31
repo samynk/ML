@@ -48,6 +48,7 @@ public class Antecedent extends RulePart {
         FuzzyVariable var = system.getFuzzyInputVariable(variable);
         if (var == null) {
             System.out.println("could not find : " + variable);
+            return 0.0f;
         }
         float value = var.evaluateAntecedent(membership, false);
         if (negation) {
