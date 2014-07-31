@@ -40,11 +40,31 @@ public class LeftSigmoidMemberShip extends MemberShip implements Cloneable{
     }
     
     /**
+     * Sets the center of this left sigmoid membership.
+     * @param center the new center for this left sigmoid membership.
+     */
+    public void setCenter(float center) {
+        this.center = center;
+        recalc();
+        notifyListeners();
+    }
+    
+    /**
      * Gets the center of this left sigmoid membership.
      * @return the center of this membership function.
      */
     public float getCenter(){
         return center;
+    }
+    
+    /**
+     * Sets the right value of this left sigmoid membership.
+     * @param right the new right value for this left sigmoid membership.
+     */
+    public void setRight(float right){
+        this.right = right;
+        recalc();
+        notifyListeners();
     }
     
     /**
@@ -91,4 +111,6 @@ public class LeftSigmoidMemberShip extends MemberShip implements Cloneable{
     public Object clone() throws CloneNotSupportedException {
         return new LeftSigmoidMemberShip(this.center,this.right,getName());
     }
+
+    
 }
