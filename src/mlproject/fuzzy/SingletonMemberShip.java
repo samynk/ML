@@ -15,18 +15,26 @@ public class SingletonMemberShip extends MemberShip implements Cloneable{
         this.value = value;
     }
     
+    public void setValue(float value){
+        this.value = value;
+        notifyListeners();
+    }
+    
     public float getValue(){
         return value;
     }
     
+    @Override
     public float getMinimumX(){
         return value;
     }
     
+    @Override
     public float getMaximumX(){
         return value;
     }
     
+    @Override
      public float evaluate(float x){
         if ( Math.abs(x - value) < 0.01f  )
             return 1.0f;
@@ -34,10 +42,12 @@ public class SingletonMemberShip extends MemberShip implements Cloneable{
             return 0.0f;
     }
      
+    @Override
      public void move(float dx) {
         value+=dx;
     }
      
+    @Override
      public String toString(){
          return Float.toString(value);
      }
