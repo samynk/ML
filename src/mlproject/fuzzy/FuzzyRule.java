@@ -24,6 +24,8 @@ public class FuzzyRule implements Comparable {
     private String outputMemberShip;
     // for bookkeeping purposes
     private ArrayList<Antecedent> antecedentList = new ArrayList<Antecedent>();
+    private boolean isParsed = false;
+    private String parseError;
 
     public ArrayList<MemberShip> getInputs() {
         ArrayList<MemberShip> inputs = new ArrayList<>();
@@ -53,6 +55,14 @@ public class FuzzyRule implements Comparable {
     public int compareTo(Object o) {
         FuzzyRule other = (FuzzyRule) o;
         return (int) ((other.getCurrentResult() - this.getCurrentResult()) * 10);
+    }
+
+    public boolean isParsed() {
+        return isParsed;
+    }
+    
+    public String getParseError(){
+        return parseError;
     }
 
    
@@ -91,15 +101,24 @@ public class FuzzyRule implements Comparable {
         int indexOfIf = rule.indexOf("if");
 
         if (indexOfThen < 0 || indexOfIf < 0) {
-            return;
+            isParsed = false;
+            if ( indexOfIf < 0){
+                parseError = "No antecedent found";
+                return;
+            }else if ( indexOfThen < 0 ){
+                parseError = "No conclusion found";
+                return;
+            }
         }
 
-        parseAnteCedent(rule.substring(indexOfIf + 2, indexOfThen));
+        boolean success1  = parseAnteCedent(rule.substring(indexOfIf + 2, indexOfThen));
 
-        parseConclusion(rule.substring(indexOfThen + 4));
+        boolean success2 = parseConclusion(rule.substring(indexOfThen + 4));
+        
+        isParsed = success1 && success2;
     }
 
-    private void parseAnteCedent(String antecedent) {
+    private boolean parseAnteCedent(String antecedent) {
         System.out.println(antecedent);
 
         // count number of left and right braces.
@@ -119,6 +138,8 @@ public class FuzzyRule implements Comparable {
 
         if (leftCount != rightCount) {
             System.out.println("braces do not match !");
+            parseError = "Unmatched braces.";
+            return false;
         }
 
         // start parsing.
@@ -169,6 +190,7 @@ public class FuzzyRule implements Comparable {
             }
         }
         top = parseStack.firstElement();
+        return true;
     }
 
     public int skipWhiteSpace(String toSkip, int startindex) {
@@ -260,10 +282,21 @@ public class FuzzyRule implements Comparable {
     public void popGroup() {
     }
 
-    private void parseConclusion(String substring) {
+    private boolean parseConclusion(String substring) {
         int indexOfIs = substring.indexOf("is ");
+        if ( indexOfIs < 0 ){
+            return false;
+        }
         outputVariable = substring.substring(0, indexOfIs).trim();
+        if ( outputVariable.length() ==0 ){
+            return false;
+        }
         outputMemberShip = substring.substring(indexOfIs + 2).trim();
+        if ( outputMemberShip.length() == 0){
+            return false;
+        }
+        
+        return true;
     }
 
     public String getOutputVariable() {
