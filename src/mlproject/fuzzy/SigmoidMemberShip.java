@@ -88,12 +88,30 @@ public class SigmoidMemberShip extends MemberShip implements Cloneable{
         recalc();
     }
     
+    public void setLeft(float left){
+        this.left = left;
+        recalc();
+        notifyListeners();
+    }
+    
     public float getLeft(){
         return left;
     }
     
+    public void setCenter(float center){
+        this.center = center;
+        recalc();
+        notifyListeners();
+    }
+    
     public float getCenter(){
         return center;
+    }
+    
+    public void setRight(float right){
+        this.right = right;
+        recalc();
+        notifyListeners();
     }
     
     public float getRight(){
