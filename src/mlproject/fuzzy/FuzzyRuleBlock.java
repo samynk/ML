@@ -17,11 +17,21 @@ public class FuzzyRuleBlock {
     private ArrayList<FuzzyRule> rules = new ArrayList<FuzzyRule>();
     private ArrayList<FuzzyVariable> inputs = new ArrayList<>();
     private ArrayList<FuzzyVariable> outputs = new ArrayList<>();
-    private int rulegroup;
+    private String name;
 
-    public FuzzyRuleBlock(FuzzySystem parent, int rulegroup) {
-        this.rulegroup = rulegroup;
+    public FuzzyRuleBlock(FuzzySystem parent, String name) {
+        this.name = name;
         this.parent = parent;
+    }
+    
+    public void clear() {
+        rules.clear();
+        inputs.clear();
+        outputs.clear();
+    }
+    
+    public String getName(){
+        return name;
     }
 
     public void addFuzzyRule(FuzzyRule rule) {
@@ -29,13 +39,13 @@ public class FuzzyRuleBlock {
         for (Antecedent a : rule.getAntecedents()) {
             String var = a.getVariable();
             FuzzyVariable input = parent.getFuzzyInputVariable(var);
-            if (!inputs.contains(input)) {
+            if (!inputs.contains(input) && input != null) {
                 inputs.add(input);
             }
         }
         String ovar = rule.getOutputVariable();
         FuzzyVariable output = parent.getFuzzyOutputVariable(ovar);
-        if (!outputs.contains(output)) {
+        if (!outputs.contains(output) && output != null) {
             outputs.add(output);
         }
     }
@@ -60,4 +70,11 @@ public class FuzzyRuleBlock {
     public Iterable<FuzzyRule> getRules() {
         return rules;
     }
+    
+    @Override
+    public String toString(){
+        return name;
+    }
+
+    
 }
