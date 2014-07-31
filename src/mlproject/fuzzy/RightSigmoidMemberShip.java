@@ -36,6 +36,12 @@ public class RightSigmoidMemberShip extends MemberShip implements Cloneable {
         leftB = left + (center - left) / 2;
         leftA = factor / (center - leftB);
     }
+    
+    public void setCenter(float center){
+        this.center = center;
+        recalc();
+        notifyListeners();
+    }
 
     /**
      * Gets the center of this left sigmoid membership.
@@ -43,6 +49,12 @@ public class RightSigmoidMemberShip extends MemberShip implements Cloneable {
      */
     public float getCenter() {
         return center;
+    }
+    
+    public void setLeft(float left){
+        this.left = left;
+        recalc();
+        notifyListeners();
     }
 
     /**
