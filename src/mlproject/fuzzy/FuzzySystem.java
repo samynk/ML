@@ -20,8 +20,9 @@ public class FuzzySystem {
     private HashMap<String, FuzzyVariable> fuzzyInputs;
     private ArrayList<FuzzyVariable> fuzzyInputList;
     private HashMap<String, FuzzyVariable> fuzzyOutputs;
+    private ArrayList<FuzzyVariable> fuzzyOutputList;
     private ArrayList<FuzzyRule> fuzzyRules;
-    private FuzzyRuleBlock[] fuzzyRuleBlocks;
+    private ArrayList<FuzzyRuleBlock> fuzzyRuleBlocks = new ArrayList<>();
     private ArrayList<ChangeListener> ruleChangeListeners = new ArrayList<>();
     private boolean iterativeMode = false;
     private int maxIterations = 20;
@@ -31,8 +32,9 @@ public class FuzzySystem {
         fuzzyInputs = new HashMap<>();
         fuzzyInputList = new ArrayList<>();
         fuzzyOutputs = new HashMap<>();
+        fuzzyOutputList = new ArrayList<>();
         fuzzyRules = new ArrayList<>();
-        fuzzyRuleBlocks = new FuzzyRuleBlock[1];
+        //default rule block.
     }
 
     public void addChangeListener(ChangeListener listener) {
@@ -47,64 +49,76 @@ public class FuzzySystem {
         fuzzyInputs.put(input.getName().toLowerCase(), input);
         fuzzyInputList.add(input);
     }
-    
-    public FuzzyVariable getFuzzyInputAt(int index){
+
+    public void removeFuzzyInput(FuzzyVariable input) {
+        fuzzyInputs.remove(input.getName());
+        fuzzyInputList.remove(input);
+    }
+
+    public FuzzyVariable getFuzzyInputAt(int index) {
         return fuzzyInputList.get(index);
     }
 
     public void addFuzzyOutput(FuzzyVariable output) {
         fuzzyOutputs.put(output.getName().toLowerCase(), output);
+        fuzzyOutputList.add(output);
+    }
+
+    public void removeFuzzyOutput(FuzzyVariable output) {
+        fuzzyOutputs.remove(output.getName());
+        fuzzyOutputList.remove(output);
+    }
+
+    public FuzzyVariable getFuzzyOutputAt(int index) {
+        return fuzzyOutputList.get(index);
     }
 
     public FuzzyVariable getFuzzyInputVariable(String variable) {
         return fuzzyInputs.get(variable.toLowerCase());
     }
-    
-    public boolean hasFuzzyInputVariable(String variable){
+
+    public boolean hasFuzzyInputVariable(String variable) {
         return fuzzyInputs.containsKey(variable);
     }
-    
-    public int getInputIndex(FuzzyVariable fv){
+
+    public int getInputIndex(FuzzyVariable fv) {
         return fuzzyInputList.indexOf(fv);
     }
 
     public FuzzyVariable getFuzzyOutputVariable(String variable) {
         return fuzzyOutputs.get(variable.toLowerCase());
     }
+    
+    public boolean hasFuzzyOutputVariable(String variable) {
+        return fuzzyOutputs.containsKey(variable);
+    }
 
     public void addFuzzyRule(FuzzyRule rule) {
-        this.addFuzzyRule(rule, 1);
+        this.addFuzzyRule(rule, "default");
     }
 
-    public void addFuzzyRule(FuzzyRule rule, int rulegroup) {
+    public void addFuzzyRule(FuzzyRule rule, String rulegroup) {
         rule.setParentSystem(this);
         fuzzyRules.add(rule);
-        
-        // rule group is one based
-        if ( rulegroup > fuzzyRuleBlocks.length ){
-            FuzzyRuleBlock[] newArray = new FuzzyRuleBlock[rulegroup];
-            System.arraycopy(this.fuzzyRuleBlocks, 0, newArray, 0, fuzzyRuleBlocks.length);
-            fuzzyRuleBlocks = newArray;
-        }
-        if ( fuzzyRuleBlocks[rulegroup-1] == null )
-        {
-            FuzzyRuleBlock block = new FuzzyRuleBlock(this,rulegroup);
-            fuzzyRuleBlocks[rulegroup-1] = block;
-        }
-        fuzzyRuleBlocks[rulegroup-1].addFuzzyRule(rule);
+
+
     }
-    
-    public FuzzyRuleBlock[] getFuzzyRuleBlocks(){
+
+    public Iterable<FuzzyRuleBlock> getFuzzyRuleBlocks() {
         return fuzzyRuleBlocks;
     }
-    
+
+    public void addFuzzyRuleBlock(FuzzyRuleBlock ruleBlock) {
+        fuzzyRuleBlocks.add(ruleBlock);
+    }
+
     public void addFuzzyRule(String rule) {
-        this.addFuzzyRule(rule,1);
+        this.addFuzzyRule(rule, 1);
     }
 
     public void addFuzzyRule(String rule, int rulegroup) {
         FuzzyRule fuzzyrule = new FuzzyRule(rule);
-        addFuzzyRule(fuzzyrule,rulegroup);
+        addFuzzyRule(fuzzyrule, "ruleblock" + rulegroup);
     }
 
     /**
@@ -208,5 +222,21 @@ public class FuzzySystem {
 
     public int getMaxIterations() {
         return maxIterations;
+    }
+
+    public int getNrOfRuleBlocks() {
+        return this.fuzzyRuleBlocks.size();
+    }
+
+    public FuzzyRuleBlock getFuzzyRuleBlock(int index) {
+        return fuzzyRuleBlocks.get(index);
+    }
+
+    public int getIndexOfFuzzyRuleBlock(FuzzyRuleBlock rb) {
+        return fuzzyRuleBlocks.indexOf(rb);
+    }
+
+    public int getOutputIndex(FuzzyVariable fv) {
+        return fuzzyOutputList.indexOf(fv);
     }
 }
