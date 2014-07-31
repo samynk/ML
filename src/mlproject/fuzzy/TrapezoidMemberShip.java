@@ -80,16 +80,40 @@ public class TrapezoidMemberShip extends MemberShip implements Cloneable {
         recalc();
     }
 
+    public void setLeft(float left) {
+        this.left = left;
+        recalc();
+        notifyListeners();
+    }
+
     public float getLeft() {
         return left;
+    }
+
+    public void setCenterLeft(float centerleft) {
+        this.centerleft = centerleft;
+        recalc();
+        notifyListeners();
     }
 
     public float getCenterLeft() {
         return centerleft;
     }
-    
-    public float getCenterRight(){
+
+    public void setCenterRight(float centerright) {
+        this.centerright = centerright;
+        recalc();
+        notifyListeners();
+    }
+
+    public float getCenterRight() {
         return centerright;
+    }
+    
+    public void setRight(float right){
+        this.right = right;
+        recalc();
+        notifyListeners();
     }
 
     public float getRight() {
@@ -97,7 +121,7 @@ public class TrapezoidMemberShip extends MemberShip implements Cloneable {
     }
 
     public String toString() {
-        return "Trapezium(" + left + " " + centerleft  + " " + centerright + " " + right + ")";
+        return "Trapezium(" + left + " " + centerleft + " " + centerright + " " + right + ")";
     }
 
     public float getLeftA() {
