@@ -36,6 +36,36 @@ public class FuzzySystem {
         fuzzyRules = new ArrayList<>();
         //default rule block.
     }
+    
+    /**
+     * Creates a clone of the fuzzy system.
+     * @return a clone of the fuzzy system.
+     */
+    public FuzzySystem clone(){
+        FuzzySystem clone = new FuzzySystem(name);
+        for( FuzzyVariable fv : this.getInputs())
+        {
+            FuzzyVariable varClone = fv.clone();
+            clone.addFuzzyInput(varClone);
+        }
+        for( FuzzyVariable fv : this.getOutputs())
+        {
+            FuzzyVariable varClone = fv.clone();
+            clone.addFuzzyOutput(varClone);
+        }
+        for ( FuzzyRuleBlock block : getFuzzyRuleBlocks())
+        {
+            FuzzyRuleBlock blockClone = new FuzzyRuleBlock(clone,block.getName());
+            clone.addFuzzyRuleBlock(blockClone);
+            for ( FuzzyRule rule: block.getRules())
+            {
+                FuzzyRule ruleClone = new FuzzyRule(rule.getRuleText());
+                blockClone.addFuzzyRule(ruleClone);
+            }
+        }
+        return clone;
+    }
+    
 
     public void addChangeListener(ChangeListener listener) {
         this.ruleChangeListeners.add(listener);

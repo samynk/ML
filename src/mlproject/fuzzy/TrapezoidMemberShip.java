@@ -43,6 +43,11 @@ public class TrapezoidMemberShip extends MemberShip implements Cloneable {
         rightB = centerright + (right - centerright) / 2;
         rightA = factor / (rightB - centerright);
     }
+    
+    @Override
+    public MemberShip clone() {
+        return new TrapezoidMemberShip(this.left, this.centerleft, this.centerright, this.right, getName());
+    }
 
     private void recalc() {
         float factor = (float) Math.log(1 / .99 - 1);
@@ -140,8 +145,5 @@ public class TrapezoidMemberShip extends MemberShip implements Cloneable {
         return rightB;
     }
 
-    @Override
-    public Object clone() throws CloneNotSupportedException {
-        return new TrapezoidMemberShip(this.left, this.centerleft, this.centerright, this.right, getName());
-    }
+    
 }

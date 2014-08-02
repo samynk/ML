@@ -32,6 +32,15 @@ public class LeftSigmoidMemberShip extends MemberShip implements Cloneable{
         recalc();
     }
     
+    /**
+     * Creates a clone of this membership function.
+     * @return the clone of this membership function.
+     */
+    @Override
+    public MemberShip clone(){
+        return new LeftSigmoidMemberShip(center,right,getName());
+    }
+    
     private void recalc(){
         float factor = (float)Math.log(1/.99 - 1);
         
@@ -96,9 +105,7 @@ public class LeftSigmoidMemberShip extends MemberShip implements Cloneable{
         recalc();
     }
     
-    public String toString(){
-        return "Shoulder left(" + center + " " + right +")";
-    }
+   
     
     public float getA(){
         return rightA;
@@ -107,10 +114,8 @@ public class LeftSigmoidMemberShip extends MemberShip implements Cloneable{
         return rightB;
     }
     
-      @Override
-    public Object clone() throws CloneNotSupportedException {
-        return new LeftSigmoidMemberShip(this.center,this.right,getName());
+    @Override
+     public String toString(){
+        return "Shoulder left(" + center + " " + right +")";
     }
-
-    
 }

@@ -13,7 +13,7 @@ import javax.swing.event.ChangeListener;
  *
  * @author Koen
  */
-public class MemberShip implements Cloneable {
+public class MemberShip {
 
     private String name;
     private FuzzyVariable parent;
@@ -24,6 +24,11 @@ public class MemberShip implements Cloneable {
     public MemberShip(String name) {
         this.name = name.toLowerCase();
         changeEvent = new ChangeEvent(this);
+    }
+    
+    @Override
+    public MemberShip clone(){
+        return new MemberShip(name);
     }
 
     public void addChangeListener(ChangeListener cl) {
@@ -124,10 +129,5 @@ public class MemberShip implements Cloneable {
 
     public void setInputTestValue(float inputTestValue) {
         this.inputTestValue = inputTestValue;
-    }
-
-    @Override
-    public Object clone() throws CloneNotSupportedException {
-        return new MemberShip(this.name);
     }
 }

@@ -15,6 +15,11 @@ public class SingletonMemberShip extends MemberShip implements Cloneable{
         this.value = value;
     }
     
+    @Override
+    public MemberShip clone() {
+        return new SingletonMemberShip(getName(),this.value);
+    }
+    
     public void setValue(float value){
         this.value = value;
         notifyListeners();
@@ -52,8 +57,5 @@ public class SingletonMemberShip extends MemberShip implements Cloneable{
          return Float.toString(value);
      }
      
-    @Override
-    public Object clone() throws CloneNotSupportedException {
-        return new SingletonMemberShip(getName(),this.value);
-    }
+   
 }

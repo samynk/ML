@@ -51,6 +51,21 @@ public class FuzzyVariable {
         isInput = true;
     }
     
+    /**
+     * Creates a clone of the fuzzy variable.
+     * @return a clone of the FuzzyVariable.
+     */
+    public FuzzyVariable clone(){
+        FuzzyVariable clone = new FuzzyVariable(name);
+        clone.isInput = isInput;
+        for( String key : memberShipFunctions.keySet())
+        {
+            MemberShip ms = memberShipFunctions.get(key);
+            clone.addMemberShip(ms.clone());
+        }
+        return clone;
+    }
+    
     public void setAsInput(){
         isInput = true;
     }
