@@ -269,4 +269,13 @@ public class FuzzySystem {
     public int getOutputIndex(FuzzyVariable fv) {
         return fuzzyOutputList.indexOf(fv);
     }
+
+    public boolean hasRuleBlock(String blockName) {
+        for( FuzzyRuleBlock block : this.fuzzyRuleBlocks)
+        {
+            if ( block.getName().equals(blockName))
+                return true;
+        }
+        return false;
+    }
 }
