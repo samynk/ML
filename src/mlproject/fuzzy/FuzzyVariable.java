@@ -97,7 +97,10 @@ public class FuzzyVariable {
     public void addMemberShip(MemberShip member){
         memberShipFunctions.put(member.getName(),member);
         member.setParent(this);
-        member.setColor(memberShipColors[memberShipFunctions.size() % memberShipColors.length]);
+        if ( member.getColor() == null)
+        {
+            member.setColor(memberShipColors[memberShipFunctions.size() % memberShipColors.length]);
+        }
     }
     
     public float getMinimum(){
