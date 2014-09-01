@@ -37,8 +37,12 @@ import java.util.HashMap;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import mlproject.fuzzy.FuzzyVariable;
+import mlproject.fuzzy.LeftSigmoidMemberShip;
 import mlproject.fuzzy.MemberShip;
+import mlproject.fuzzy.RightSigmoidMemberShip;
+import mlproject.fuzzy.SigmoidMemberShip;
 import mlproject.fuzzy.SingletonMemberShip;
+import mlproject.fuzzy.TrapezoidMemberShip;
 
 /**
  *
@@ -56,6 +60,8 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
     private ArrayList<MemberShip> selectedMemberShips = new ArrayList<>();
     private DecimalFormat dec = new DecimalFormat("###.##");
     private ArrayList<ItemListener> selectionListeners = new ArrayList<ItemListener>();
+    
+    private FuzzyVariable demoVariable;
 
     /**
      * Creates new form FuzzyVariableGUI
@@ -72,12 +78,31 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
         initHatch();
 
         valueRectangle = new RoundRectangle2D.Double();
+        
+        demoVariable = new FuzzyVariable("demo");
+        MemberShip m1 = new TrapezoidMemberShip(-1, -0.5f, 0.5f, 1, "center");
+        m1.setColor( new Color(200,200,200,127));
+        demoVariable.addMemberShip( m1 );
+        MemberShip m2 = new SigmoidMemberShip(-4, -1, -0.5f, "left");
+        m2.setColor( new Color(180,180,180,127));
+        demoVariable.addMemberShip( m2);
+        MemberShip m3 = new SigmoidMemberShip(0.5f,1,4, "right");
+        m3.setColor ( new Color(180,180,180,127) );
+        demoVariable.addMemberShip( m3 );
+        MemberShip m4 = new LeftSigmoidMemberShip(-4,-1, "farleft");
+        m4.setColor ( new Color(160,160,160,127));
+        demoVariable.addMemberShip( m4 );
+        MemberShip m5 =new RightSigmoidMemberShip(1,4,"farright");
+        m5.setColor ( new Color(160,160,160,127));
+        demoVariable.addMemberShip( m5 );
     }
 
+    @Override
     public void addItemListener(ItemListener listener) {
         selectionListeners.add(listener);
     }
 
+    @Override
     public void removeItemListener(ItemListener listener) {
         selectionListeners.remove(listener);
     }
@@ -125,13 +150,14 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
         //System.out.println("painting component " + this.getWidth() + ","+ this.getHeight()+ " = " + variable);
 
         if (variable == null) {
+            paintVariable(demoVariable, (Graphics2D)g);
             return;
         }
         adjustMinMax(variable);
-        paintVariable((Graphics2D) g);
+        paintVariable(variable,(Graphics2D) g);
     }
 
-    public void paintVariable(Graphics2D g2d) {
+    public void paintVariable(FuzzyVariable varToDraw, Graphics2D g2d) {
         AffineTransform backup = g2d.getTransform();
         float scaleX = getWidth() / (xmax - xmin);
         float scaleY = -(getHeight());
@@ -150,7 +176,7 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
          */
 
         memberShipShapes.clear();
-        for (MemberShip ms : variable.getMemberShips()) {
+        for (MemberShip ms : varToDraw.getMemberShips()) {
             if (!(ms instanceof SingletonMemberShip)) {
                 gp.reset();
                 float starty = ms.evaluate(xmin);
@@ -184,12 +210,12 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
             }
         }
 
-        // draw the current input value of the fuzzy variable
+        // draw the current input value of the fuzzy varToDraw
         float value = 0.0f;
-        if (variable.isInput()) {
-            value = variable.getInputValue();
-        } else if (variable.isOutput()) {
-            value = variable.getOutputValue();
+        if (varToDraw.isInput()) {
+            value = varToDraw.getInputValue();
+        } else if (varToDraw.isOutput()) {
+            value = varToDraw.getOutputValue();
         }
 
         float rvalue = value;
@@ -220,7 +246,7 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
 
         g2d.setColor(Color.black);
         FontMetrics fm = g2d.getFontMetrics();
-        for (MemberShip ms : variable.getMemberShips()) {
+        for (MemberShip ms : varToDraw.getMemberShips()) {
             float minimum = ms.getMinimumX();
             float maximum = ms.getMaximumX();
             float centerPos = minimum + (maximum - minimum) / 2;
@@ -325,6 +351,8 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
     // End of variables declaration//GEN-END:variables
     @Override
     public void mouseClicked(MouseEvent e) {
+        if ( variable == null)
+            return;
         //if (!e.isControlDown()) {
         selectedMemberShips.clear();
         //}
@@ -333,13 +361,13 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
         float scaleY = -(getHeight() - 10);
         float xpos = ((e.getX()) / scaleX) + xmin;
         float ypos = (e.getY() / scaleY) + 1;
-        System.out.println("xpos, ypos :[" + xpos + "," + ypos + "]");
+        //System.out.println("xpos, ypos :[" + xpos + "," + ypos + "]");
         for (String memberShip : memberShipShapes.keySet()) {
             Shape s = memberShipShapes.get(memberShip);
             // translate x and y to the shape coordinate system.
 
             if (s.contains(xpos, ypos)) {
-                System.out.println("membership selected : " + memberShip);
+                //System.out.println("membership selected : " + memberShip);
                 MemberShip ms = variable.getMemberShip(memberShip);
 //                if (e.isControlDown()) {
 //                    if (selectedMemberShips.contains(ms)) {
@@ -364,7 +392,9 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
 
     @Override
     public void mousePressed(MouseEvent e) {
-
+        if ( variable == null){
+            return;
+        }
         startDraggingPossible = false;
         Point2D.Float pos = convertToShapeCoordinates(e.getPoint());
         lastMousePress = pos;
@@ -471,5 +501,9 @@ public class FuzzyVariableGUI extends javax.swing.JPanel implements MouseListene
         float size = Math.abs(xmax - xmin) * 0.025f;
         xmin -= size;
         xmax += size;
+    }
+
+    private void paintEmptyVariable(Graphics2D g2D) {
+        
     }
 }
