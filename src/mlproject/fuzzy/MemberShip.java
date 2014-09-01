@@ -105,6 +105,7 @@ public class MemberShip {
     public void move(float dx) {
     }
 
+    @Override
     public String toString() {
         return "MemberShip base class";
     }
