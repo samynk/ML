@@ -50,7 +50,7 @@ public class ParseFCL {
 
     private void read(String systemName, BufferedReader br) throws IOException {
         String line;
-        result = new FuzzySystem(systemName);
+        result = new FuzzySystem(systemName, false);
         state = PARSESTATE.IDLE;
         while ((line = br.readLine()) != null) {
             line = line.trim();

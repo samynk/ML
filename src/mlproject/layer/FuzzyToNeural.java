@@ -562,7 +562,7 @@ public class FuzzyToNeural {
     }
 
     public static void main(String[] args) {
-        FuzzySystem system = new FuzzySystem("neural test");
+        FuzzySystem system = new FuzzySystem("neural test", false);
         FuzzyVariable iv = new FuzzyVariable("input");
         iv.addMemberShip(new LeftSigmoidMemberShip(-10, -5, "left"));
         iv.addMemberShip(new SigmoidMemberShip(-10, -5, 1, "center"));

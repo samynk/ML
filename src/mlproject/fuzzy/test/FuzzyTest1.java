@@ -22,7 +22,7 @@ public class FuzzyTest1 {
      */
     public static void main(String[] args) {
         // TODO code application logic here
-        FuzzySystem angleController = new FuzzySystem("armController");
+        FuzzySystem angleController = new FuzzySystem("armController",false);
         
         FuzzyVariable angle = new FuzzyVariable("angle");
         angle.addMemberShip(new LeftSigmoidMemberShip(-15,-5,"FARLEFT") );
