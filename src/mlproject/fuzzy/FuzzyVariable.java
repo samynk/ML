@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package mlproject.fuzzy;
 
 import java.awt.Color;
@@ -230,6 +226,10 @@ public class FuzzyVariable {
 
     public float getInputValue() {
         return this.inputValue;
+    }
+    
+    public void setInputValue(float value){
+        this.inputValue = value;
     }
     /**
      * Returns a string representation of this FuzzyVariable
