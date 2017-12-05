@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package mlproject.fuzzy;
 
 import java.util.ArrayList;
@@ -27,7 +23,7 @@ public class FuzzySystem {
     private boolean iterativeMode = false;
     private int maxIterations = 20;
 
-    public FuzzySystem(String name) {
+    public FuzzySystem(String name, boolean createDefault) {
         this.name = name;
         fuzzyInputs = new HashMap<>();
         fuzzyInputList = new ArrayList<>();
@@ -41,8 +37,8 @@ public class FuzzySystem {
      * Creates a clone of the fuzzy system.
      * @return a clone of the fuzzy system.
      */
-    public FuzzySystem clone(){
-        FuzzySystem clone = new FuzzySystem(name);
+    public FuzzySystem clone() throws CloneNotSupportedException{
+        FuzzySystem clone = new FuzzySystem(name, false);
         for( FuzzyVariable fv : this.getInputs())
         {
             FuzzyVariable varClone = fv.clone();
