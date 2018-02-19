@@ -1,3 +1,15 @@
 /dist/
 /nbproject/private/
 /build/
+/.nb-gradle/
+/ml_core/build/
+/ml_core/hs_err_pid13504.log
+/.gradle/2.13/taskArtifacts/taskArtifacts.bin
+/.gradle/2.13/taskArtifacts/cache.properties
+/.gradle/2.13/taskArtifacts/fileHashes.bin
+/.gradle/2.13/taskArtifacts/cache.properties.lock
+/.gradle/2.13/taskArtifacts/fileSnapshots.bin
+/ml_core/hs_err_pid4604.log
+/ml_core/hs_err_pid3940.log
+/ml_core/hs_err_pid12740.log
+/ml_core/hs_err_pid14228.log

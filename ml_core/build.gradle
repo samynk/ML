@@ -1,0 +1,43 @@
+sourceCompatibility = 1.8
+version='1.0.0'
+
+repositories {
+        mavenCentral()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+        resources {
+            srcDir 'resources' 
+        }
+    }
+
+    test {
+        java {
+            srcDir 'src/test/java'
+        }
+        resources {
+            srcDir 'resources'
+        }
+    }
+}
+
+//project.ext.lwjglVersion = "3.1.6"
+
+dependencies {
+    testCompile 'junit:junit:4.8.2'
+    compile group: 'org.jblas', name: 'jblas', version: '1.2.4'
+    compile 'org.jocl:jocl-blast:1.2.0'
+    compile group: 'jfree', name: 'jfreechart', version: '1.0.13'
+}
+
+test {
+	reports.junitXml.destination = file('build/test-results/')
+
+	reports {
+		junitXml.enabled = true
+	}               
+}

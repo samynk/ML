@@ -1,0 +1,38 @@
+sourceCompatibility = 1.8
+version='1.0.0'
+
+repositories {
+        mavenCentral()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+        resources {
+            srcDir 'resources' 
+        }
+    }
+
+    test {
+        java {
+            srcDir 'src/test/java'
+        }
+        resources {
+            srcDir 'resources'
+        }
+    }
+}
+
+dependencies {
+	testCompile 'junit:junit:4.8.2'
+}
+
+test {
+	reports.junitXml.destination = file('build/test-results/')
+
+	reports {
+		junitXml.enabled = true
+	}               
+}
