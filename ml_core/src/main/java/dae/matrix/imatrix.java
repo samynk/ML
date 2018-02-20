@@ -1,6 +1,7 @@
 package dae.matrix;
 
 import dae.neuralnet.activation.Function;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -94,6 +95,13 @@ public interface imatrix {
     public int getNrOfColumns();
     
     /**
+     * Returns the total number of cells in this matrix.
+     * 
+     * @return the total number of cells in the matrix.
+     */
+    public int getSize();
+    
+    /**
      * Gets the maximum value in the matrix.
      *
      * @return a Cell object with the maximum value.
@@ -157,6 +165,8 @@ public interface imatrix {
      * @return the raw data.
      */
     public FloatBuffer getRawData();
+    
+    public ByteBuffer getBuffer();
 
     /**
      * Checks if this is a transposed view on the source data.

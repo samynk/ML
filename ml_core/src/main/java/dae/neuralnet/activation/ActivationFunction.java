@@ -20,6 +20,10 @@ public enum ActivationFunction {
     SIGMOID(
             x -> (float) (1 / (1 + Math.exp(-x))),
             x -> x * (1 - x)
+    ),
+    LEAKYRELU(
+        x-> (x < 0) ? 0.01f * x :x,
+        x -> (x < 0) ? 0.01f:1    
     );
 
     private final Function a;

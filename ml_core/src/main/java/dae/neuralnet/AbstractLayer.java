@@ -5,7 +5,6 @@ import dae.matrix.imatrix;
 import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.activation.Function;
-import java.util.Random;
 
 /**
  *

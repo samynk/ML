@@ -1,14 +1,10 @@
-package dae.matrix.blas;
+package dae.matrix.gpu;
 
-import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
-import java.nio.FloatBuffer;
 import org.jocl.CL;
 import static org.jocl.CL.CL_CONTEXT_PLATFORM;
-import static org.jocl.CL.CL_DEVICE_MAX_COMPUTE_UNITS;
 import static org.jocl.CL.CL_DEVICE_NAME;
 import static org.jocl.CL.CL_DEVICE_TYPE_ALL;
-import static org.jocl.CL.CL_MEM_COPY_HOST_PTR;
 import static org.jocl.CL.CL_MEM_READ_ONLY;
 import static org.jocl.CL.CL_MEM_READ_WRITE;
 import static org.jocl.CL.CL_TRUE;
@@ -22,13 +18,10 @@ import static org.jocl.CL.clGetDeviceInfo;
 import static org.jocl.CL.clGetPlatformIDs;
 import static org.jocl.CL.clReleaseCommandQueue;
 import static org.jocl.CL.clReleaseContext;
-import static org.jocl.CL.clReleaseMemObject;
-import static org.jocl.CL.clWaitForEvents;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
 import static org.jocl.blast.CLBlast.CLBlastSgemm;
 import static org.jocl.blast.CLBlastLayout.CLBlastLayoutColMajor;
-import static org.jocl.blast.CLBlastLayout.CLBlastLayoutRowMajor;
 import static org.jocl.blast.CLBlastTranspose.*;
 import org.jocl.cl_command_queue;
 import org.jocl.cl_context;
@@ -42,10 +35,12 @@ import org.jocl.cl_platform_id;
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
-public class OCLBlas {
+public class FMaxtrixOpGpu {
 
-    private static cl_context context;
-    private static cl_command_queue commandQueue;
+    private static final cl_context context;
+    private static final cl_command_queue commandQueue;
+    
+    private static final OpenCLKernel convolvKernel;
 
     static {
         // The platform, device type and device number
@@ -91,6 +86,9 @@ public class OCLBlas {
 
         // Create a command-queue
         commandQueue = clCreateCommandQueue(context, device, 0, null);
+        
+        convolvKernel = new OpenCLKernel("/kernels/convolve.kernel");
+        convolvKernel.init(context, commandQueue);
     }
 
     private static int getInt(cl_device_id device, int paramName) {
@@ -173,6 +171,18 @@ public class OCLBlas {
         //clReleaseMemObject(memC);
         // clReleaseCommandQueue(commandQueue);
         // clReleaseContext(context);
+    }
+    
+    /**
+     * Applies a convolution filter on the input matrix.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    public static void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
+        convolvKernel.convolv(input, filter, output);
     }
 
     public static void cleanup() {

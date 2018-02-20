@@ -1,0 +1,23 @@
+__kernel void convolution(
+    __global float* input,
+    __constant float* filter,
+    __global float* output,
+    const int2 iDim,
+    const int2 fDim,
+    const int2 oDim
+)
+{
+    int gx = get_global_id(0);
+    int gy = get_global_id(1);
+
+    float sum = 0;
+    for(int mx = 0;  mx < fDim.x; ++mx){
+        for(int my =0; my < fDim.y;++my){
+            int ix = gx + mx;
+            int iy = gy + my;
+            int index = iy * iDim.x + ix;
+            sum+= input[index] * filter[my*fDim.x + mx];
+        }
+    }
+    output[ gy * oDim.x + gx] = sum;
+}

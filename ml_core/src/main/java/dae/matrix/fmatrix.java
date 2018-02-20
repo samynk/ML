@@ -1,7 +1,9 @@
 package dae.matrix;
 
-import dae.matrix.blas.OCLBlas;
+import dae.matrix.gpu.FMaxtrixOpGpu;
 import dae.neuralnet.activation.Function;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Random;
@@ -14,11 +16,12 @@ import org.jocl.cl_mem;
  */
 public strictfp class fmatrix implements imatrix {
 
-    private int rows;
-    private int columns;
+    private final int rows;
+    private final int columns;
 
     // private float[] data;
     private FloatBuffer data;
+    private ByteBuffer bb;
     private cl_mem rMem;
     private cl_mem rwMem;
 
@@ -31,8 +34,8 @@ public strictfp class fmatrix implements imatrix {
     public fmatrix(int rows, int columns) {
         this.rows = rows;
         this.columns = columns;
-        //ByteBuffer bb = ByteBuffer.allocate(rows * columns * Float.BYTES);
-        data = FloatBuffer.allocate(rows*columns);
+        
+        data = FloatBuffer.allocate(rows * columns);
     }
 
     /**
@@ -43,6 +46,11 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public FloatBuffer getRawData() {
         return data;
+    }
+
+    @Override
+    public ByteBuffer getBuffer() {
+        return bb;
     }
 
     /**
@@ -202,7 +210,7 @@ public strictfp class fmatrix implements imatrix {
         }
         return result;
     }
-    
+
     /**
      * Gets the minimum value in the matrix.
      *
@@ -213,8 +221,8 @@ public strictfp class fmatrix implements imatrix {
         Cell result = new Cell();
         return min(result);
     }
-    
-      /**
+
+    /**
      * Gets the minimum value in the matrix.
      *
      * @param result a Cell object that will store the result.
@@ -236,7 +244,6 @@ public strictfp class fmatrix implements imatrix {
         }
         return result;
     }
-
 
     /**
      * Gets a row from the matrix, as an fmatrix object.
@@ -334,6 +341,16 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public int getNrOfColumns() {
         return columns;
+    }
+
+    /**
+     * Returns the total number of cells in this matrix.
+     *
+     * @return the total number of cells in the matrix.
+     */
+    @Override
+    public int getSize() {
+        return rows * columns;
     }
 
     /**
@@ -482,6 +499,20 @@ public strictfp class fmatrix implements imatrix {
             float v = data.get(i);
             float vf = f.evaluate(v);
             data.put(i, vf);
+        }
+    }
+
+    public void applyCellFunction(IndexedFunction f) {
+        Cell temp = new Cell();
+        for (int r = 0; r < rows; ++r) {
+            for (int c = 0; c < columns; ++c) {
+                float v = get(r, c);
+                temp.column = c;
+                temp.row = r;
+                temp.value = v;
+                float vf = f.evaluate(temp);
+                set(r, c, vf);
+            }
         }
     }
 
@@ -678,7 +709,7 @@ public strictfp class fmatrix implements imatrix {
     public static imatrix sgemm(float alpha, imatrix a, imatrix b, float beta, imatrix c) {
         //NativeBlas.sgemm('N', 'N', c.rows, c.columns, a.columns, alpha, a.data, 0,
         //			a.rows, b.data, 0, b.rows, beta, c.data, 0, c.rows);
-        OCLBlas.sgemm(alpha, a, b, beta, c);
+        FMaxtrixOpGpu.sgemm(alpha, a, b, beta, c);
 //        char opA = 'N';
 //        int lda = a.getNrOfRows();
 //        if (a.isTransposed()) {
@@ -982,10 +1013,6 @@ public strictfp class fmatrix implements imatrix {
         return result.toString();
     }
 
-    public static void main(String[] args) {
-
-    }
-
     public void randomize(int i, int i0) {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
@@ -993,7 +1020,7 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public cl_mem getCLReadMem() {
         if (rMem == null) {
-            rMem = OCLBlas.createReadMem(this);
+            rMem = FMaxtrixOpGpu.createReadMem(this);
         }
         return rMem;
     }
@@ -1001,14 +1028,13 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public cl_mem getCLReadWriteMem() {
         if (rwMem == null) {
-            rwMem = OCLBlas.createReadWriteMem(this);
+            rwMem = FMaxtrixOpGpu.createReadWriteMem(this);
         }
         return rwMem;
     }
 
     @Override
     public Pointer getCLPointer() {
-        data.rewind();
         return Pointer.to(data.array());
     }
 }

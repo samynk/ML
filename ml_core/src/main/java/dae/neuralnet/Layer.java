@@ -195,7 +195,7 @@ public class Layer extends AbstractLayer {
     @Override
     public void randomizeWeights() {
         Random r = new Random();
-        weights.applyFunction(x -> ((r.nextFloat() * 2) - 1.0f) / 10.0f);
+        weights.applyFunction(x -> (r.nextFloat()-.5f) * 2);
     }
 
     public void printInputs() {

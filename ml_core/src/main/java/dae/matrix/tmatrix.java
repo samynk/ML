@@ -1,6 +1,7 @@
 package dae.matrix;
 
 import dae.neuralnet.activation.Function;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -76,6 +77,16 @@ public class tmatrix implements imatrix {
     public int getNrOfColumns() {
         return source.getNrOfRows();
     }
+    
+    /**
+     * Returns the total number of cells in this matrix.
+     * 
+     * @return the total number of cells in the matrix.
+     */
+    @Override
+    public int getSize(){
+        return source.getSize();
+    }
 
     @Override
     public String getSizeAsString() {
@@ -95,6 +106,11 @@ public class tmatrix implements imatrix {
     @Override
     public FloatBuffer getRawData() {
         return source.getRawData();
+    }
+    
+    @Override
+    public ByteBuffer getBuffer(){
+        return source.getBuffer();
     }
 
     /**
@@ -144,4 +160,6 @@ public class tmatrix implements imatrix {
     public imatrix copy() {
         return new tmatrix(source.copy());
     }
+
+   
 }

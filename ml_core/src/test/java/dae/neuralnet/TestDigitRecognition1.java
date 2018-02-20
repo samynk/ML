@@ -20,8 +20,8 @@ import org.junit.Test;
 public class TestDigitRecognition1 {
 
     private static final int TEST_ITERATIONS = 100;
-    private static final int TRAIN_ITERATIONS = 5000;
-    private static final int BATCH_SIZE = 100;
+    private static final int TRAIN_ITERATIONS = 100000;
+    private static final int BATCH_SIZE = 10;
     private static final float LEARNING_RATE = 0.1f;
 
     public TestDigitRecognition1() {
@@ -53,9 +53,10 @@ public class TestDigitRecognition1 {
         System.out.println(trainSetLabels.getSizeAsString());
 
         AbstractLayer l1 = new TranslateLayer(784, ActivationFunction.IDENTITY);
-        AbstractLayer l2 = new Layer(784, 1, 10, ActivationFunction.SOFTMAX);
+        AbstractLayer l2 = new Layer(784, 1, 800, ActivationFunction.SIGMOID);
+        AbstractLayer l3 = new Layer(800, 0, 10, ActivationFunction.SOFTMAX);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
+        DeepLayer dl = new DeepLayer(l1, l2, l3);
         dl.randomizeWeights();
 
         Random r = new Random();
@@ -138,13 +139,15 @@ public class TestDigitRecognition1 {
         fmatrix trainSetLabels = blr.getResult();
         System.out.println(trainSetLabels.getSizeAsString());
 
-        AbstractLayer l1 = new Layer(784, 0, 100, BATCH_SIZE, ActivationFunction.SIGMOID);
-        AbstractLayer l2 = new TranslateLayer(100, BATCH_SIZE, ActivationFunction.SIGMOID);
-        AbstractLayer l3 = new Layer(100, 0, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
-        
+        //AbstractLayer l1 = new Layer(784, 0, 784, BATCH_SIZE, ActivationFunction.SIGMOID);
+        AbstractLayer l1 = new Layer(784, 0, 400, BATCH_SIZE, ActivationFunction.IDENTITY);
+        AbstractLayer l2 = new TranslateLayer(400, BATCH_SIZE, ActivationFunction.LEAKYRELU);
+        AbstractLayer l3 = new Layer(400, 0, 100, BATCH_SIZE, ActivationFunction.SIGMOID);
+        AbstractLayer l4 = new Layer(100, 1, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
+        //AbstractLayer l4 = new Layer(100, 1, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
 
-        DeepLayer dl = new DeepLayer(l1, l2, l3);
-        
+        DeepLayer dl = new DeepLayer(l1, l2, l3, l4);
+
         dl.randomizeWeights();
 
         Random r = new Random();
