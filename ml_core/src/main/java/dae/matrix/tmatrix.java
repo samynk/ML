@@ -1,7 +1,6 @@
 package dae.matrix;
 
 import dae.neuralnet.activation.Function;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -27,6 +26,11 @@ public class tmatrix implements imatrix {
     @Override
     public void set(int row, int column, float value) {
         source.set(column, row, value);
+    }
+
+    @Override
+    public void set(int row, int column, int slice, float value) {
+        source.set(column, row, slice, value);
     }
 
     @Override
@@ -69,6 +73,11 @@ public class tmatrix implements imatrix {
     }
 
     @Override
+    public float get(int row, int column, int slice) {
+        return source.get(column, row, slice);
+    }
+
+    @Override
     public int getNrOfRows() {
         return source.getNrOfColumns();
     }
@@ -77,14 +86,29 @@ public class tmatrix implements imatrix {
     public int getNrOfColumns() {
         return source.getNrOfRows();
     }
-    
+
+    @Override
+    public int getNrOfSlices() {
+        return source.getNrOfSlices();
+    }
+
     /**
      * Returns the total number of cells in this matrix.
-     * 
+     *
      * @return the total number of cells in the matrix.
      */
     @Override
-    public int getSize(){
+    public int getSliceSize() {
+        return source.getSliceSize();
+    }
+    
+    /**
+     * Returns the number of cells in one slice of this matrix.
+     *
+     * @return the number of cells in one slice of the matrix.
+     */
+    @Override
+    public int getSize() {
         return source.getSize();
     }
 
@@ -104,13 +128,8 @@ public class tmatrix implements imatrix {
     }
 
     @Override
-    public FloatBuffer getRawData() {
-        return source.getRawData();
-    }
-    
-    @Override
-    public ByteBuffer getBuffer(){
-        return source.getBuffer();
+    public FloatBuffer getHostData() {
+        return source.getHostData();
     }
 
     /**
@@ -125,14 +144,14 @@ public class tmatrix implements imatrix {
     public cl_mem getCLReadMem() {
         return source.getCLReadMem();
     }
-    
+
     @Override
     public cl_mem getCLReadWriteMem() {
         return source.getCLReadWriteMem();
     }
-    
+
     @Override
-    public Pointer getCLPointer(){
+    public Pointer getCLPointer() {
         return source.getCLPointer();
     }
 
@@ -161,5 +180,33 @@ public class tmatrix implements imatrix {
         return new tmatrix(source.copy());
     }
 
-   
+    @Override
+    public int getColPadding() {
+        return source.getColPadding();
+    }
+
+    @Override
+    public int getRowPadding() {
+        return source.getRowPadding();
+    }
+    
+    /**
+     * Get the number of columns on the device.
+     *
+     * @return the number of columns on the gpu device.
+     */
+    @Override
+    public int getDeviceColumns() {
+        return source.getDeviceColumns();
+    }
+
+    /**
+     * Get the number of rows on the device.
+     *
+     * @return the number of rows on the gpu device.
+     */
+    @Override
+    public int getDeviceRows() {
+        return source.getDeviceRows();
+    }
 }

@@ -4,17 +4,15 @@
  */
 package dae.matrix.gpu;
 
-import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import static org.jocl.CL.*;
-import org.jocl.Pointer;
-import org.jocl.Sizeof;
 import org.jocl.cl_command_queue;
 import org.jocl.cl_context;
 import org.jocl.cl_kernel;
+import org.jocl.cl_mem;
 import org.jocl.cl_program;
 
 /**
@@ -26,10 +24,9 @@ public class OpenCLKernel {
     private final String kernelFile;
     private final String kernelSource;
 
-    private cl_command_queue commandQueue;
-    private cl_context context;
+    protected cl_command_queue commandQueue;
+    protected cl_context context;
     private cl_program program;
-    private cl_kernel kernel;
 
     /**
      *
@@ -47,9 +44,6 @@ public class OpenCLKernel {
             sb.append('\n');
         });
         kernelSource = sb.toString();
-
-        System.out.println("Source code :");
-        System.out.println(sb.toString());
     }
 
     /**
@@ -57,6 +51,7 @@ public class OpenCLKernel {
      *
      * @param context the opencl context.
      * @param commandQueue the command queue to use.
+     *
      */
     public void init(cl_context context, cl_command_queue commandQueue) {
         this.context = context;
@@ -64,57 +59,126 @@ public class OpenCLKernel {
         program = clCreateProgramWithSource(context, 1, new String[]{kernelSource}, null, null);
         String compileOptions = "-cl-mad-enable";
         clBuildProgram(program, 0, null, compileOptions, null, null);
-        kernel = clCreateKernel(program, "convolution", null);
+    }
+
+    /**
+     * Writes to a buffer object on the device that is defined as a read only
+     * buffer on the device.
+     *
+     * @param m the matrix to upload into the device.
+     * @return the buffer object that is associated with the device buffer.
+     */
+    protected final cl_mem uploadRMatrix(imatrix m) {
+        cl_mem buffer = m.getCLReadMem();
+        enqueueWriteMatrix(m, buffer);
+        return buffer;
+    }
+
+    /**
+     * Writes to a buffer object on the device that is defined as a read/write
+     * buffer on the device.
+     *
+     * @param m the matrix to upload into the device.
+     * @return the buffer object that is associated with the device buffer.
+     */
+    protected final cl_mem uploadRWMatrix(imatrix m) {
+        cl_mem buffer = m.getCLReadWriteMem();
+        enqueueWriteMatrix(m, buffer);
+        return buffer;
+    }
+
+    /**
+     * Writes the matrix m into the provided device buffer on the device.
+     *
+     * @param m the matrix m to upload into the device.
+     * @param deviceBuffer the buffer object that is associated with the
+     * buffer on the device.
+     * @return
+     */
+    private void enqueueWriteMatrix(imatrix m, cl_mem deviceBuffer) {
+        int deviceCols = m.getDeviceColumns();
+        int deviceRows = m.getDeviceRows();
+
+        long region[] = new long[]{m.getNrOfColumns() * Float.BYTES, m.getNrOfRows(), m.getNrOfSlices()};
+        clEnqueueWriteBufferRect(commandQueue, deviceBuffer, CL_TRUE,
+                new long[]{0, 0, 0},
+                new long[]{0, 0, 0},
+                region,
+                // device
+                deviceCols * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
+                // host
+                m.getNrOfColumns() * Float.BYTES, m.getSliceSize() * Float.BYTES,
+                m.getCLPointer(),
+                0,
+                null,
+                null);
+    }
+
+    /**
+     * Downloads a padded matrix from the device that was used as a read only
+     * buffer into the matrix m.
+     *
+     * @param m the padded matrix to download from the device
+     */
+    protected final void downloadRMatrix(imatrix m) {
+        cl_mem memOutput = m.getCLReadMem();
+        enqueueReadMatrix(m, memOutput);
+    }
+
+    /**
+     * Downloads a padded matrix that was used as a read write buffer into the
+     * matrix m.
+     *
+     * @param m the padded matrix to download from the device
+     */
+    protected final void downloadRWMatrix(imatrix m) {
+        cl_mem memOutput = m.getCLReadWriteMem();
+        enqueueReadMatrix(m, memOutput);
+    }
+
+    /**
+     * Reads a matrix from the referenced device buffer object.
+     *
+     * @param m the matrix to read the buffer into.
+     * @param deviceBuffer the device buffer to read the data from.
+     */
+    private void enqueueReadMatrix(imatrix m, cl_mem deviceBuffer) {
+        int deviceCols = m.getDeviceColumns();
+        int deviceRows = m.getDeviceRows();
+
+        long region[] = new long[]{m.getNrOfColumns() * Float.BYTES, m.getNrOfRows(), m.getNrOfSlices()};
+        clEnqueueReadBufferRect(commandQueue, deviceBuffer, CL_TRUE,
+                new long[]{0, 0, 0},
+                new long[]{0, 0, 0},
+                region,
+                // device
+                deviceCols * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
+                // host
+                m.getNrOfColumns() * Float.BYTES, m.getSliceSize() * Float.BYTES,
+                m.getCLPointer(),
+                0,
+                null,
+                null);
+    }
+
+    /**
+     * Creates a kernel for a specific method in the source file.
+     *
+     * @param method the method to compile.
+     * @return the created kernel.
+     */
+    public final cl_kernel createKernel(String method) {
+        return clCreateKernel(program, method, null);
+    }
+
+    /**
+     * Release the program.
+     */
+    public void releaseProgram() {
         clReleaseProgram(program);
     }
 
     public void destroy() {
-        clReleaseKernel(kernel);
-    }
 
-    public void convolv(imatrix input, imatrix filter, imatrix output) {
-        int[] iDim = new int[]{input.getNrOfRows(), input.getNrOfColumns()};
-        int[] fDim = new int[]{filter.getNrOfRows(), filter.getNrOfColumns()};
-        int[] oDim = new int[]{output.getNrOfRows(), output.getNrOfColumns()};
-
-        clEnqueueWriteBuffer(commandQueue, input.getCLReadMem(), CL_TRUE, 0, input.getSize()
-                * Sizeof.cl_float, input.getCLPointer(), 0, null, null);
-        clEnqueueWriteBuffer(commandQueue, filter.getCLReadMem(), CL_TRUE, 0, filter.getSize()
-                * Sizeof.cl_float, filter.getCLPointer(), 0, null, null);
-        clEnqueueWriteBuffer(commandQueue, output.getCLReadWriteMem(), CL_TRUE, 0, output.getSize()
-                * Sizeof.cl_float, output.getCLPointer(), 0, null, null);
-
-        clSetKernelArg(kernel, 0, Sizeof.cl_mem, Pointer.to(input.getCLReadMem()));
-        clSetKernelArg(kernel, 1, Sizeof.cl_mem, Pointer.to(filter.getCLReadMem()));
-        clSetKernelArg(kernel, 2, Sizeof.cl_mem, Pointer.to(output.getCLReadWriteMem()));
-        clSetKernelArg(kernel, 3, Sizeof.cl_int2, Pointer.to(iDim));
-        clSetKernelArg(kernel, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        clSetKernelArg(kernel, 5, Sizeof.cl_int2, Pointer.to(oDim));
-
-        long globalSize[] = new long[2];
-        // globalSize[0] = round(fDim[0],output.getNrOfColumns());
-        // globalSize[1] = round(fDim[1],output.getNrOfRows());
-        globalSize[0] = output.getNrOfColumns();
-        globalSize[1] = output.getNrOfRows();
-
-        long localSize[] = new long[]{4,4};
-        clEnqueueNDRangeKernel(
-                commandQueue,
-                kernel,
-                2,
-                null,
-                globalSize,
-                localSize,
-                0,
-                null,
-                null);
-
-        clEnqueueReadBuffer(commandQueue, output.getCLReadWriteMem(), CL_TRUE, 0, output.getSize()
-                * Sizeof.cl_float, Pointer.to(output.getRawData()), 0, null, null);
-    }
-
-    private static long round(long groupSize, long globalSize) {
-        long r = globalSize % groupSize;
-        return r == 0 ? globalSize : globalSize + groupSize - r;
     }
 }

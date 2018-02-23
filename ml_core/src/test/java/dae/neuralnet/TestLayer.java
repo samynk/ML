@@ -47,7 +47,7 @@ public class TestLayer {
         Layer l1 = new Layer(2, 1, 2, ActivationFunction.SIGMOID);
         Layer l2 = new Layer(2, 1, 2, ActivationFunction.SIGMOID);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
+        DeepLayer dl = new DeepLayer(i -> .5f, l1, l2);
         assertTrue(dl.isValid());
 
         imatrix weights1 = l1.getWeights();
@@ -60,11 +60,9 @@ public class TestLayer {
         l1.printInputs();
         l1.forward();
 
-        
-        
         fmatrix output1 = l1.getOutputs();
         System.out.println(output1.toString());
-        
+
         assertEquals(0.593269992f, output1.get(0, 0), 0.0010f);
         assertEquals(0.596884378f, output1.get(0, 1), 0.0010f);
 
@@ -80,14 +78,18 @@ public class TestLayer {
         assertEquals(0.75136507f, output2.get(0, 0), 0.0010f);
         assertEquals(0.772928465f, output2.get(0, 1), 0.0010f);
 
-        fmatrix errors = l2.getErrors();
-        assertEquals(0.274811083f, errors.get(0, 0), 0.0010f);
-        assertEquals(0.023560026f, errors.get(0, 1), 0.0010f);
+        l2.backpropagate(0.5f, true);
 
-        float totalError = errors.sum();
+        fmatrix errors = l2.getErrors();
+        fmatrix E = new fmatrix(errors);
+        E.applyFunction(x -> x * x / 2.0f);
+
+        assertEquals(0.274811083f, E.get(0, 0), 0.0010f);
+        assertEquals(0.023560026f, E.get(0, 1), 0.0010f);
+
+        float totalError = E.sum();
         assertEquals(0.298371109, totalError, .0001f);
 
-        l2.backpropagate(0.5f, true);
         imatrix weights = l2.getDeltaWeights();
         System.out.println("Weights:");
         System.out.println("________");
@@ -125,7 +127,7 @@ public class TestLayer {
         target.setRow(0, new float[]{0.01f, 0.99f});
 
         for (int i = 0; i < 1000; ++i) {
-            dl.train(0.5f, input, target);
+            dl.train(i, input, target);
         }
     }
 
@@ -204,7 +206,6 @@ public class TestLayer {
         System.out.println("Number of successes : " + success);
     }
 
-    
     public void testDigitRecognition() {
         BinImageReader bir = new BinImageReader("/data/train-images.idx3-ubyte.bin");
         fmatrix images = bir.getResult();
@@ -215,13 +216,12 @@ public class TestLayer {
         System.out.println(trainSetLabels.getSizeAsString());
 
         // batch size 1
-        Layer l1 = new Layer(784, 1, 784, 1,ActivationFunction.IDENTITY, MatrixFactory.TRANSLATE_MATRIX);
+        Layer l1 = new Layer(784, 1, 784, 1, ActivationFunction.IDENTITY, MatrixFactory.TRANSLATE_MATRIX);
         Layer l2 = new Layer(784, 1, 10, ActivationFunction.SOFTMAX);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
-        dl.randomizeWeights();
-
-        Random r = new Random();
+        DeepLayer dl = new DeepLayer(i -> .5f, l1, l2);
+        Random r = new Random(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.05f, 0.05f);
 
         int maxImage = images.getNrOfColumns();
         fmatrix image = new fmatrix(1, images.getNrOfColumns());
@@ -235,9 +235,9 @@ public class TestLayer {
             int digit = (int) trainSetLabels.get(0, nextImage);
 
             target.reset();
-            target.set(0, digit , 1);
+            target.set(0, digit, 1);
 
-            dl.train(0.1f, image, target);
+            dl.train(i, image, target);
         }
 
         testDigitRecognition(dl, r);
@@ -273,7 +273,7 @@ public class TestLayer {
             fmatrix result = dl.getLastLayer().getOutputs();
             Cell c = result.max();
 
-            if ( c.column == digit) {
+            if (c.column == digit) {
                 success++;
             }
         }
@@ -283,13 +283,14 @@ public class TestLayer {
     public void testOneDProblemStandard() {
         // 1 input, 1 bias, 1 output.
         Layer l1 = new Layer(1, 1, 1, ActivationFunction.SIGMOID);
-        l1.randomizeWeights();
+
+        Random r = new Random();
+        r.setSeed(System.currentTimeMillis());
+        l1.randomizeWeights(r, -0.05f, 0.05f);
 
 //        System.out.println("Start weights:");
 //        System.out.println("______________");
 //        System.out.println(l1.getWeights());
-        Random r = new Random();
-        r.setSeed(System.currentTimeMillis());
         fmatrix input = new fmatrix(1, 1);
         fmatrix target = new fmatrix(1, 1);
 
@@ -334,7 +335,6 @@ public class TestLayer {
         System.out.println("Number of successes : " + (success * 1.0f / 1000.0f) * 100 + "%\n");
     }
 
-  
     public void testOneDProblemSpecial() {
         // 1 input, 1 bias, 1 output.
         Layer l1 = new Layer(1, 1, 1, ActivationFunction.IDENTITY);
@@ -344,14 +344,15 @@ public class TestLayer {
 
         Layer l2 = new Layer(1, 0, 1, ActivationFunction.SIGMOID);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
-        dl.randomizeWeights();
+        DeepLayer dl = new DeepLayer(i -> 5f, l1, l2);
+
+        Random r = new Random();
+        r.setSeed(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.05f, 0.05f);
 
         // extra constraint
         l1.getWeights().set(0, 0, 1);
 
-        Random r = new Random();
-        r.setSeed(System.currentTimeMillis());
         fmatrix input = new fmatrix(1, 1);
         fmatrix target = new fmatrix(1, 1);
 
@@ -367,7 +368,7 @@ public class TestLayer {
             } else {
                 target.set(0, 0, 0);
             }
-            dl.train(5f, input, target);
+            dl.train(i, input, target);
         }
 
         System.out.println("With constraint");
@@ -405,20 +406,20 @@ public class TestLayer {
         return (result > .8f && input > cutoff) || (result < .2f && input < cutoff);
     }
 
-    
     public void testOneDProblemWithoutConstraint() {
         // 1 input, 1 bias, 1 output.
         Layer l1 = new Layer(1, 1, 1, ActivationFunction.IDENTITY);
         Layer l2 = new Layer(1, 0, 1, ActivationFunction.SIGMOID);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
-        dl.randomizeWeights();
+        DeepLayer dl = new DeepLayer(i -> 1f, l1, l2);
+
+        Random r = new Random();
+        r.setSeed(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.05f, 0.05f);
 
         // extra constraint
         l1.getWeights().set(0, 0, 1);
 
-        Random r = new Random();
-        r.setSeed(System.currentTimeMillis());
         fmatrix input = new fmatrix(1, 1);
         fmatrix target = new fmatrix(1, 1);
 
@@ -433,7 +434,7 @@ public class TestLayer {
             } else {
                 target.set(0, 0, 0);
             }
-            dl.train(1f, input, target);
+            dl.train(i, input, target);
         }
 
         System.out.println("Without constraint");
@@ -462,17 +463,17 @@ public class TestLayer {
         System.out.println("Sucess Rate:" + (success * 1.0f / 1000.0f) * 100 + "%\n");
     }
 
-   
     public void testTranslateLayer() {
         // batch size 1
         Layer l1 = new Layer(2, 1, 2, 1, ActivationFunction.IDENTITY, MatrixFactory.TRANSLATE_MATRIX);
         Layer l2 = new Layer(2, 0, 2, ActivationFunction.SIGMOID);
 
-        DeepLayer dl = new DeepLayer(l1, l2);
-        dl.randomizeWeights();
+        DeepLayer dl = new DeepLayer(i -> 1f, l1, l2);
 
         Random r = new Random();
         r.setSeed(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.05f, 0.05f);
+
         fmatrix input = new fmatrix(1, 2);
         fmatrix target = new fmatrix(1, 2);
 
@@ -487,7 +488,7 @@ public class TestLayer {
             target.set(0, 0, T > cutoff1 ? 1 : 0);
             target.set(0, 1, H > cutoff2 ? 1 : 0);
 
-            dl.train(1f, input, target);
+            dl.train(i, input, target);
         }
 
         int success = 0;

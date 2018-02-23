@@ -3,7 +3,7 @@ package dae.neuralnet;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import java.util.Calendar;
-import java.util.Date;
+import java.util.Random;
 
 /**
  *
@@ -13,14 +13,17 @@ public class DeepLayer {
 
     private final AbstractLayer[] layers;
     private boolean validNetwork;
+    private LearningRate learningRate;
 
     /**
      * Creates a new deep layer neural network with the given inputs and outputs
      * and
      *
+     * @param lr the learning rate calculator for this neural network.
      * @param layers the layers that will form the neural network.
      */
-    public DeepLayer(AbstractLayer... layers) {
+    public DeepLayer(LearningRate lr, AbstractLayer... layers) {
+        this.learningRate = lr;
         this.layers = layers;
         validNetwork = true;
         for (int i = 0; i < (layers.length - 1); ++i) {
@@ -35,9 +38,16 @@ public class DeepLayer {
 
     }
 
-    public void randomizeWeights() {
+    /**
+     * Randomize all the weights.
+     *
+     * @param r the Random object to use.
+     * @param min the minimum value for the random weight.
+     * @param max the maximum value for the random weight.
+     */
+    public void randomizeWeights(Random r, float min, float max) {
         for (AbstractLayer l : layers) {
-            l.randomizeWeights();
+            l.randomizeWeights(r, min, max);
         }
     }
 
@@ -83,18 +93,19 @@ public class DeepLayer {
 
     /**
      *
-     * @param learningRate
+     * @param iteration the current iteration in the training phase.
      * @param input the training input.
      * @param target the target output.
      */
-    public void train(float learningRate, imatrix input, imatrix target) {
+    public void train(int iteration, imatrix input, imatrix target) {
         setTarget(target);
         forward(input);
+        float lr = this.learningRate.getLearningRate(iteration);
 
         for (int i = layers.length; i > 0; --i) {
             AbstractLayer current = layers[i - 1];
             // only calculate deltas for last layer.
-            current.backpropagate(learningRate, i == layers.length);
+            current.backpropagate(lr, i == layers.length);
 
             if ((i - 2) >= 0) {
                 AbstractLayer previous = layers[i - 2];
@@ -126,12 +137,12 @@ public class DeepLayer {
         int layerIndex = 1;
         Calendar c = Calendar.getInstance();
         int year = c.get(Calendar.YEAR);
-        int  month = c.get(Calendar.MONTH);
+        int month = c.get(Calendar.MONTH);
         int day = c.get(Calendar.DAY_OF_MONTH);
         int hour = c.get(Calendar.HOUR_OF_DAY);
         int mins = c.get(Calendar.MINUTE);
         for (AbstractLayer l : this.layers) {
-            l.writeWeightImage("weight_"+year+"_"+month+"_"+day+"#"+hour+"_"+mins+"_"+layerIndex);
+            l.writeWeightImage("weight_" + year + "_" + month + "_" + day + "#" + hour + "_" + mins + "_" + layerIndex);
             ++layerIndex;
         }
     }

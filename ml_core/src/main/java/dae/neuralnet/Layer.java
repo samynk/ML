@@ -150,11 +150,11 @@ public class Layer extends AbstractLayer {
 
         // fmatrix.multiply(outputs, inputs, weights);
         //outputs.applyFunction(this.activation);
-        if (this.function == ActivationFunction.SOFTMAX) {
-            // row wise softmax.
-            outputs.softMaxPerRow();
-        } else {
-            outputs.applyFunction(this.activation);
+        switch(function){
+            case SOFTMAX: outputs.softMaxPerRow();break;
+            //case SIGMOID: fmatrix.sigmoid(outputs);break;
+            default:
+                outputs.applyFunction(this.activation);
         }
     }
 
@@ -192,10 +192,16 @@ public class Layer extends AbstractLayer {
         fmatrix.copyInto(deltaWeights, weights);
     }
 
+    /**
+     * Randomize all the weights.
+     *
+     * @param r the Random object to use.
+     * @param min the minimum value for the random weight.
+     * @param max the maximum value for the random weight.
+     */
     @Override
-    public void randomizeWeights() {
-        Random r = new Random();
-        weights.applyFunction(x -> (r.nextFloat()-.5f) * 2);
+    public void randomizeWeights(Random r, float min, float max) {
+        weights.applyFunction(x -> min + r.nextFloat()*(max-min));
     }
 
     public void printInputs() {

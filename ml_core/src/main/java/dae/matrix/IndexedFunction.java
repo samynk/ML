@@ -9,5 +9,5 @@ package dae.matrix;
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
 public interface IndexedFunction {
-    float evaluate(Cell c);
+    float evaluate(int row, int column, int slice, float value);
 }

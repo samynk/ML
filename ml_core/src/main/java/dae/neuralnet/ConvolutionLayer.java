@@ -4,6 +4,7 @@ import dae.matrix.fmatrix;
 import dae.matrix.fsubmatrix;
 import dae.matrix.imatrix;
 import dae.neuralnet.activation.ActivationFunction;
+import java.util.Random;
 
 /**
  *
@@ -28,7 +29,7 @@ public class ConvolutionLayer implements ILayer {
     /**
      * The weight matrices
      */
-    private final fmatrix[] weights;
+    private final fmatrix weights;
     /**
      * The inputs for this layer.
      */
@@ -37,6 +38,10 @@ public class ConvolutionLayer implements ILayer {
      * The padded inputs.
      */
     private final fmatrix paddedInputs;
+    /**
+     * The outputs of this layer.
+     */
+    private final fmatrix outputs;
 
     /**
      * Creates a new convolution layer. The inputs of the convolutional layer
@@ -54,14 +59,25 @@ public class ConvolutionLayer implements ILayer {
      */
     public ConvolutionLayer(int features, int wInputs, int hInputs, int padding, int filter, int stride, int batchSize, ActivationFunction af) {
         // filter weights are shared.
-        weights = new fmatrix[features];
-        for (int i = 0; i < features; ++i) {
-            weights[i] = new fmatrix(filter, filter);
-        }
+        weights = new fmatrix(filter, filter, features);
 
-        paddedInputs = new fmatrix(wInputs + padding*2, hInputs + padding*2);
-        inputs =new fsubmatrix(paddedInputs, padding, padding, hInputs, wInputs);
-        
+        paddedInputs = new fmatrix(wInputs + padding * 2, hInputs + padding * 2);
+        inputs = new fsubmatrix(paddedInputs, padding, padding, hInputs, wInputs);
+
+        int oR = (paddedInputs.getNrOfRows() - filter + 1);
+        int oC = (paddedInputs.getNrOfColumns() - filter + 1);
+
+        outputs = new fmatrix(oR, oC, features);
+    }
+
+    @Override
+    public int getNrOfInputs() {
+        return inputs.getSize();
+    }
+
+    @Override
+    public int getNrOfOutputs() {
+        return outputs.getSize();
     }
 
     @Override
@@ -85,11 +101,6 @@ public class ConvolutionLayer implements ILayer {
     }
 
     @Override
-    public void randomizeWeights() {
-
-    }
-
-    @Override
     public void writeWeightImage(String file) {
 
     }
@@ -97,6 +108,11 @@ public class ConvolutionLayer implements ILayer {
     @Override
     public void backpropagate(float learningRate, boolean calculateErrors) {
 
+    }
+
+    @Override
+    public void randomizeWeights(Random r, float min, float max) {
+        weights.applyFunction(x -> min + r.nextFloat()*(max-min));
     }
 
 }

@@ -1,13 +1,25 @@
 package dae.neuralnet;
 
 import dae.matrix.fmatrix;
+import java.util.Random;
 
 /**
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public interface ILayer {
-     /**
+
+    /**
+     * @return the total number of inputs.
+     */
+    public int getNrOfInputs();
+
+    /**
+     * @return the total number of outputs.
+     */
+    public int getNrOfOutputs();
+
+    /**
      * Multiplies the input matrix with the weight matrix and stores the result
      * in the output matrix.
      */
@@ -47,11 +59,16 @@ public interface ILayer {
 
     /**
      * Randomize all the weights.
+     *
+     * @param r the Random object to use.
+     * @param min the minimum value for the random weight.
+     * @param max the maximum value for the random weight.
      */
-    public void randomizeWeights();
+    public void randomizeWeights(Random r, float min, float max);
 
     /**
      * Writes the weights as an image to the given file location.
+     *
      * @param file the file location to write to.
      */
     public void writeWeightImage(String file);

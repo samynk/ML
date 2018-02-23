@@ -5,15 +5,18 @@ import dae.matrix.imatrix;
 import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.activation.Function;
+import java.util.Random;
 
 /**
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
-public abstract class AbstractLayer {
+public abstract class AbstractLayer implements ILayer {
 
     private final int nrOfInputs;
     private final int nrOfOutputs;
+    // multiplication of the output in slices.
+    private final int nrOfOutputSlices;
     private final int nrOfBiases;
     private final int batchSize;
 
@@ -63,6 +66,7 @@ public abstract class AbstractLayer {
     public AbstractLayer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af) {
         this.nrOfInputs = nrOfInputs;
         this.nrOfOutputs = nrOfOutputs;
+        this.nrOfOutputSlices = 1;
         this.nrOfBiases = nrOfBiases;
         this.batchSize = batchSize;
 
@@ -73,9 +77,9 @@ public abstract class AbstractLayer {
         this.deltas = new fmatrix(batchSize, nrOfOutputs);
         this.derivatives = new fmatrix(batchSize, nrOfOutputs);
 
-        this.outputs = new fmatrix(batchSize, nrOfOutputs);
-        this.errors = new fmatrix(batchSize, nrOfOutputs);
-        this.ideal = new fmatrix(batchSize, nrOfOutputs);
+        this.outputs = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
+        this.errors = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
+        this.ideal = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
 
         function = af;
         activation = af.getActivation();
@@ -85,6 +89,7 @@ public abstract class AbstractLayer {
     /**
      * @return the nrOfInputs
      */
+    @Override
     public int getNrOfInputs() {
         return nrOfInputs;
     }
@@ -99,6 +104,7 @@ public abstract class AbstractLayer {
     /**
      * @return the nrOfOutputs
      */
+    @Override
     public int getNrOfOutputs() {
         return nrOfOutputs;
     }
@@ -193,6 +199,7 @@ public abstract class AbstractLayer {
      * Multiplies the input matrix with the weight matrix and stores the result
      * in the output matrix.
      */
+    @Override
     public abstract void forward();
 
     /**
@@ -204,6 +211,7 @@ public abstract class AbstractLayer {
      * @param calculateErrors calculate the deltas by subtracting the ideals
      * from the outputs.
      */
+    @Override
     public void backpropagate(float learningRate, boolean calculateErrors) {
 
         // 2. multiply with derivative of activation function. 
@@ -216,7 +224,6 @@ public abstract class AbstractLayer {
 
         // 1. copy output - ideal (target) into deltas.
         if (calculateErrors) {
-            //fmatrix.dotsubtract(deltas, this.outputs, this.ideal);
             fmatrix.dotsubtract(errors, this.outputs, this.ideal);
         }
 
@@ -234,6 +241,7 @@ public abstract class AbstractLayer {
      *
      * @param learningRate
      */
+    @Override
     public abstract void calculateNewWeights(float learningRate);
 
     /**
@@ -241,18 +249,26 @@ public abstract class AbstractLayer {
      *
      * @param errors the deltas of the next layer.
      */
+    @Override
     public abstract void calculateErrors(fmatrix errors);
 
     /**
      * Apply the changes in weights to the weight matrix.
      */
+    @Override
     public abstract void adaptWeights();
 
     /**
      * Randomize all the weights.
+     *
+     * @param r the random object to use.
+     * @param min the minimum value for the random weight.
+     * @param max the maximum value for the random weight.
      */
-    public abstract void randomizeWeights();
+    @Override
+    public abstract void randomizeWeights(Random r, float min, float max);
 
+    @Override
     public abstract void writeWeightImage(String file);
-        
+
 }

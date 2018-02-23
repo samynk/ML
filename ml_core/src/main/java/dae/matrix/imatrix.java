@@ -22,6 +22,16 @@ public interface imatrix {
     public void set(int row, int column, float value);
 
     /**
+     * Sets a cell in this matrix to the given value.
+     *
+     * @param row the row to set.
+     * @param column the column to set.
+     * @param slice the slice to set.
+     * @param value the new value for the cell.
+     */
+    public void set(int row, int column, int slice, float value);
+
+    /**
      * Sets a row in the matrix to the given values.
      *
      * @param row the row to set.
@@ -61,7 +71,7 @@ public interface imatrix {
      * @param columnStorage the column storage to store the row in.
      */
     public void getColumn(int column, imatrix columnStorage);
-    
+
     /**
      * Stores a row of this matrix into the target row of the imatrix storage.
      *
@@ -81,6 +91,16 @@ public interface imatrix {
     public float get(int row, int column);
 
     /**
+     * Gets the value of a cell.
+     *
+     * @param row the row of the cell.
+     * @param column the column of the cell.
+     * @param slice the slice of the cell.
+     * @return the value of the cell.
+     */
+    public float get(int row, int column, int slice);
+
+    /**
      * Returns the number of rows.
      *
      * @return the number of rows.
@@ -93,43 +113,57 @@ public interface imatrix {
      * @return the number of columns.
      */
     public int getNrOfColumns();
-    
+
+    /**
+     * Returns the number of slices in the matrix.
+     *
+     * @return the number of slices.
+     */
+    public int getNrOfSlices();
+
+    /**
+     * Returns the total number of cells in this matrix in a single slice.
+     *
+     * @return the total number of cells in the matrix.
+     */
+    public int getSliceSize();
+
     /**
      * Returns the total number of cells in this matrix.
-     * 
+     *
      * @return the total number of cells in the matrix.
      */
     public int getSize();
-    
+
     /**
      * Gets the maximum value in the matrix.
      *
      * @return a Cell object with the maximum value.
      */
     public Cell max();
-    
+
     /**
      * Gets the maximum value in the matrix.
      *
      * @param result a Cell object that will store the result.
      * @return the result parameter.
      */
-    public Cell max(Cell result) ;
-    
-     /**
+    public Cell max(Cell result);
+
+    /**
      * Gets the minimum value in the matrix.
      *
      * @return a Cell object with the maximum value.
      */
     public Cell min();
-    
+
     /**
      * Gets the maximum value in the matrix.
      *
      * @param result a Cell object that will store the result.
      * @return the result parameter.
      */
-    public Cell min(Cell result) ;
+    public Cell min(Cell result);
 
     /**
      * Multiplies all the cells in this matrix with the given value.
@@ -151,10 +185,10 @@ public interface imatrix {
      * @param f the function to apply.
      */
     public void applyFunction(Function f);
-    
+
     /**
      * Creates a copy of this matrix.
-     * 
+     *
      * @return a copy of this matrix.
      */
     public imatrix copy();
@@ -164,25 +198,49 @@ public interface imatrix {
      *
      * @return the raw data.
      */
-    public FloatBuffer getRawData();
-    
-    public ByteBuffer getBuffer();
+    public FloatBuffer getHostData();
 
     /**
      * Checks if this is a transposed view on the source data.
+     *
      * @return true if the matrix is transposed, false othersise.
      */
     public boolean isTransposed();
+
     /**
      * Gets the cl_mem read only buffer associated with this matrix.
+     *
      * @return a cl_mem object.
      */
     public cl_mem getCLReadMem();
-     /**
+
+    /**
      * Gets the cl_mem buffer associated with this matrix.
+     *
      * @return a cl_mem object.
      */
-    public cl_mem getCLReadWriteMem();  
+    public cl_mem getCLReadWriteMem();
     
+    /**
+     * Get the padding for the columns.
+     * @return the padding for the columns.
+     */
+    public int getColPadding();
+    /**
+     * Get the padding for the rows.
+     * @return the padding for the rows.
+     */
+    public int getRowPadding();
+    /**
+     * Get the number of columns on the device.
+     * @return the number of columns on the gpu device.
+     */
+    public int getDeviceColumns();
+    /**
+     * Get the number of rows on the device.
+     * @return the number of rows on the gpu device.
+     */
+    public int getDeviceRows();
+
     public Pointer getCLPointer();
 }

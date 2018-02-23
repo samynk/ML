@@ -5,6 +5,7 @@
 package dae.matrix.cpu;
 
 import dae.matrix.imatrix;
+import dae.matrix.op.FMatrixOp;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -12,7 +13,7 @@ import java.util.logging.Logger;
  *
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
-public class FMatrixOpCpu {
+public class FMatrixOpCpu implements FMatrixOp {
 
     /**
      * Calculates the following product : alpha A * B + beta * C, where A*B is a
@@ -57,8 +58,28 @@ public class FMatrixOpCpu {
     public void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
         for (int or = 0; or < output.getNrOfRows(); ++or) {
             for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
-                float c = convolveSingle(or, oc, input, filter, stride);
+                float c = convolveSingle(or, oc, 0, input, filter, stride);
                 output.set(or, oc, c);
+            }
+        }
+    }
+
+    /**
+     * Applies a convolution filter on the input matrix, with the slices taken
+     * into account.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
+        for (int slice = 0; slice < filter.getNrOfSlices(); ++slice) {
+            for (int or = 0; or < output.getNrOfRows(); ++or) {
+                for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
+                    float c = convolveSingle(or, oc, slice, input, filter, stride);
+                    output.set(or, oc, slice, c);
+                }
             }
         }
     }
@@ -73,7 +94,7 @@ public class FMatrixOpCpu {
      * @param stride the stride of the convolution window.
      * @return
      */
-    private float convolveSingle(int or, int oc, imatrix input, imatrix filter, int stride) {
+    private float convolveSingle(int or, int oc, int slice, imatrix input, imatrix filter, int stride) {
         int irb = or * stride;
         int irc = oc * stride;
 
@@ -82,11 +103,33 @@ public class FMatrixOpCpu {
             for (int fc = 0; fc < filter.getNrOfColumns(); ++fc) {
                 int ir = irb + fr;
                 int ic = irc + fc;
-                float iv = input.get(ir,ic);
-                float fv = filter.get(fr, fc);
+                float iv = input.get(ir, ic);
+                float fv = filter.get(fr, fc, slice);
                 c += iv * fv;
             }
         }
         return c;
+    }
+
+    /**
+     * Calculates the sigmoid activation function. The result is stored back
+     * into the given matrix.
+     *
+     * @param O the matrix to apply the sigmoid activation function to.
+     */
+    @Override
+    public void sigmoid(imatrix O) {
+        O.applyFunction(x -> 1 / (1 + (float) Math.exp(-x)));
+    }
+
+    /**
+     * Calculates the derivative of the sigmoid activation function. The result
+     * is stored back into the given matrix.
+     *
+     * @param O the matrix to apply the sigmoid activation function to.
+     */
+    @Override
+    public void dsigmoid(imatrix O) {
+        O.applyFunction(x -> 1 / (1 + (float) Math.exp(-x)));
     }
 }

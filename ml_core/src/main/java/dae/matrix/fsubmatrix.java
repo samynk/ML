@@ -1,12 +1,6 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package dae.matrix;
 
 import dae.neuralnet.activation.Function;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -20,8 +14,10 @@ public class fsubmatrix implements imatrix {
     private final imatrix source;
     private final int rb;
     private final int cb;
+    private final int sb;
     private final int rows;
     private final int columns;
+    private final int slices;
 
     /**
      * Creates a sub matrix which uses another matrix as backing source.
@@ -33,17 +29,39 @@ public class fsubmatrix implements imatrix {
      * @param columns the number of columns in the submatrix.
      */
     public fsubmatrix(imatrix source, int rb, int cb, int rows, int columns) {
+        this(source, rb, cb, 0, rows, columns, source.getNrOfSlices());
+    }
+
+    /**
+     * Creates a sub matrix which uses another matrix as backing source.
+     *
+     * @param source the source matrix of this matrix.
+     * @param rb the row base of the submatrix.
+     * @param cb the column base of the submatrix.
+     * @param sb the slice base of the submatrix.
+     * @param rows the number of rows in the submatrix.
+     * @param columns the number of columns in the submatrix.
+     * @param slices the number of slices in the submatrix.
+     */
+    public fsubmatrix(imatrix source, int rb, int cb, int sb, int rows, int columns, int slices) {
         this.source = source;
         this.rb = Math.max(rb, 0);
         this.cb = Math.max(cb, 0);
+        this.sb = Math.max(sb, 0);
 
         this.rows = Math.min(source.getNrOfRows(), Math.max(rows, 0));
         this.columns = Math.min(source.getNrOfColumns(), Math.max(columns, 0));
+        this.slices = Math.min(source.getNrOfSlices(), Math.max(slices, 0));
     }
 
     @Override
     public void set(int row, int column, float value) {
         source.set(row - rb, column - cb, value);
+    }
+
+    @Override
+    public void set(int row, int column, int slice, float value) {
+        source.set(row - rb, column - cb, slice - sb, value);
     }
 
     @Override
@@ -80,6 +98,11 @@ public class fsubmatrix implements imatrix {
     public float get(int row, int column) {
         return source.get(row - rb, column - cb);
     }
+    
+    @Override
+    public float get(int row, int column, int slice) {
+        return source.get(row - rb, column - cb);
+    }
 
     @Override
     public int getNrOfRows() {
@@ -91,14 +114,28 @@ public class fsubmatrix implements imatrix {
         return columns;
     }
     
+    @Override
+    public int getNrOfSlices() {
+        return slices;
+    }
+    
     /**
-     * Returns the total number of cells in this matrix.
-     * 
-     * @return the total number of cells in the matrix.
+     * Returns the size of one slice in this matrix.
+     * @return the size of one slice in this matrix.
      */
     @Override
     public int getSize(){
-        return rows*columns;
+        return rows* columns;
+    }
+
+    /**
+     * Returns the total number of cells in this matrix.
+     *
+     * @return the total number of cells in the matrix.
+     */
+    @Override
+    public int getSliceSize() {
+        return rows * columns * slices;
     }
 
     @Override
@@ -147,15 +184,15 @@ public class fsubmatrix implements imatrix {
         fmatrix copy = new fmatrix(rows, columns);
         for (int r = 0; r < rows; ++r) {
             for (int c = 0; c < columns; ++c) {
-                copy.set(r,c, get(r,c));
+                copy.set(r, c, get(r, c));
             }
         }
         return copy;
     }
 
     @Override
-    public FloatBuffer getRawData() {
-        return source.getRawData();
+    public FloatBuffer getHostData() {
+        return source.getHostData();
     }
 
     @Override
@@ -179,7 +216,37 @@ public class fsubmatrix implements imatrix {
     }
 
     @Override
-    public ByteBuffer getBuffer() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public String toString() {
+        return fmatrix.print(this);
+    }
+
+    @Override
+    public int getColPadding() {
+        return source.getColPadding();
+    }
+
+    @Override
+    public int getRowPadding() {
+        return source.getRowPadding();
+    }
+
+    /**
+     * Get the number of columns on the device.
+     *
+     * @return the number of columns on the gpu device.
+     */
+    @Override
+    public int getDeviceColumns() {
+        return source.getDeviceColumns();
+    }
+
+    /**
+     * Get the number of rows on the device.
+     *
+     * @return the number of rows on the gpu device.
+     */
+    @Override
+    public int getDeviceRows() {
+        return source.getDeviceRows();
     }
 }

@@ -20,8 +20,8 @@ import org.junit.Test;
 public class TestDigitRecognition1 {
 
     private static final int TEST_ITERATIONS = 100;
-    private static final int TRAIN_ITERATIONS = 100000;
-    private static final int BATCH_SIZE = 10;
+    private static final int TRAIN_ITERATIONS = 20000;
+    private static final int BATCH_SIZE = 50;
     private static final float LEARNING_RATE = 0.1f;
 
     public TestDigitRecognition1() {
@@ -56,10 +56,10 @@ public class TestDigitRecognition1 {
         AbstractLayer l2 = new Layer(784, 1, 800, ActivationFunction.SIGMOID);
         AbstractLayer l3 = new Layer(800, 0, 10, ActivationFunction.SOFTMAX);
 
-        DeepLayer dl = new DeepLayer(l1, l2, l3);
-        dl.randomizeWeights();
-
-        Random r = new Random();
+        LearningRateDecay lrd = new LearningRateDecay(.5f, 0001f);
+        DeepLayer dl = new DeepLayer(lrd, l1, l2, l3);
+        Random r = new Random(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.001f, 0.001f);
 
         int maxImage = images.getNrOfColumns();
         fmatrix image = new fmatrix(1, images.getNrOfColumns());
@@ -75,7 +75,7 @@ public class TestDigitRecognition1 {
             target.reset();
             target.set(0, digit, 1);
 
-            dl.train(0.1f, image, target);
+            dl.train(i, image, target);
         }
 
         testDigitRecognition(dl, 1, r);
@@ -140,17 +140,18 @@ public class TestDigitRecognition1 {
         System.out.println(trainSetLabels.getSizeAsString());
 
         //AbstractLayer l1 = new Layer(784, 0, 784, BATCH_SIZE, ActivationFunction.SIGMOID);
-        AbstractLayer l1 = new Layer(784, 0, 400, BATCH_SIZE, ActivationFunction.IDENTITY);
-        AbstractLayer l2 = new TranslateLayer(400, BATCH_SIZE, ActivationFunction.LEAKYRELU);
-        AbstractLayer l3 = new Layer(400, 0, 100, BATCH_SIZE, ActivationFunction.SIGMOID);
-        AbstractLayer l4 = new Layer(100, 1, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
-        //AbstractLayer l4 = new Layer(100, 1, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
+        AbstractLayer l1 = new Layer(784, 0, 400, BATCH_SIZE, ActivationFunction.LEAKYRELU);
+        AbstractLayer l2 = new Layer(400, 0, 200, BATCH_SIZE, ActivationFunction.LEAKYRELU);
+        AbstractLayer l3 = new Layer(200, 0, 100, BATCH_SIZE, ActivationFunction.SIGMOID);
+        AbstractLayer l4 = new Layer(100, 0, 50, BATCH_SIZE, ActivationFunction.LEAKYRELU);
+        AbstractLayer l5 = new Layer(50, 0, 25, BATCH_SIZE, ActivationFunction.SIGMOID);
+        AbstractLayer l6 = new Layer(25, 0, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
 
-        DeepLayer dl = new DeepLayer(l1, l2, l3, l4);
+        LearningRate lrd = new LearningRateDecay(.2f, .0001f);
+        DeepLayer dl = new DeepLayer(lrd, l1, l2, l3, l4, l5, l6);
 
-        dl.randomizeWeights();
-
-        Random r = new Random();
+        Random r = new Random(System.currentTimeMillis());
+        dl.randomizeWeights(r, -0.1f, 0.1f);
 
         int maxImage = images.getNrOfColumns();
         fmatrix image = new fmatrix(BATCH_SIZE, images.getNrOfColumns());
@@ -166,7 +167,7 @@ public class TestDigitRecognition1 {
                 int digit = (int) trainSetLabels.get(0, nextImage);
                 target.set(b, digit, 1);
             }
-            dl.train(LEARNING_RATE, image, target);
+            dl.train(i, image, target);
         }
 
         dl.writeWeightImages();

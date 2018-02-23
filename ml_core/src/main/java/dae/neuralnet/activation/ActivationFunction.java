@@ -22,8 +22,8 @@ public enum ActivationFunction {
             x -> x * (1 - x)
     ),
     LEAKYRELU(
-        x-> (x < 0) ? 0.01f * x :x,
-        x -> (x < 0) ? 0.01f:1    
+            x -> (x < 0) ? 0.01f * x : 0.1f * x,
+            x -> (x < 0) ? 0.01f : .1f
     );
 
     private final Function a;
