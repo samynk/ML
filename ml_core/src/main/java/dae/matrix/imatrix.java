@@ -136,6 +136,13 @@ public interface imatrix {
     public int getSize();
 
     /**
+     * Gets the zero padding around the matrix.
+     *
+     * @return the zero padding around the matrix.
+     */
+    public int getZeroPadding();
+
+    /**
      * Gets the maximum value in the matrix.
      *
      * @return a Cell object with the maximum value.
@@ -220,24 +227,31 @@ public interface imatrix {
      * @return a cl_mem object.
      */
     public cl_mem getCLReadWriteMem();
-    
+
     /**
      * Get the padding for the columns.
+     *
      * @return the padding for the columns.
      */
     public int getColPadding();
+
     /**
      * Get the padding for the rows.
+     *
      * @return the padding for the rows.
      */
     public int getRowPadding();
+
     /**
      * Get the number of columns on the device.
+     *
      * @return the number of columns on the gpu device.
      */
     public int getDeviceColumns();
+
     /**
      * Get the number of rows on the device.
+     *
      * @return the number of rows on the gpu device.
      */
     public int getDeviceRows();

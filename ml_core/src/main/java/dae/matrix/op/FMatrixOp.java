@@ -44,17 +44,29 @@ public interface FMatrixOp {
      * @param output the matrix where the output is stored.
      */
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output);
-    
     /**
-     * Calculates the sigmoid activation function. The result is stored
-     * back into the given matrix.
+     * Applies a correlation filter on the input matrix, with the slices taken
+     * into account.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output);
+
+    /**
+     * Calculates the sigmoid activation function. The result is stored back
+     * into the given matrix.
+     *
      * @param O the matrix to apply the sigmoid activation function to.
      */
     public void sigmoid(imatrix O);
-    
+
     /**
-     * Calculates the derivative of the sigmoid activation function. The result is stored
-     * back into the given matrix.
+     * Calculates the derivative of the sigmoid activation function. The result
+     * is stored back into the given matrix.
+     *
      * @param O the matrix to apply the sigmoid activation function to.
      */
     public void dsigmoid(imatrix O);

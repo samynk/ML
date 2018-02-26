@@ -25,6 +25,7 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param beta a float value that defines the beta value.
      * @param C the matrix C, where the result will be stored.
      */
+    @Override
     public void sgemm(float alpha, imatrix A, imatrix B, float beta, imatrix C) {
         C.multiply(beta);
 
@@ -55,6 +56,7 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param stride the stride with which to advance the filter.
      * @param output the matrix where the output is stored.
      */
+    @Override
     public void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
         for (int or = 0; or < output.getNrOfRows(); ++or) {
             for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
@@ -73,6 +75,7 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param stride the stride with which to advance the filter.
      * @param output the matrix where the output is stored.
      */
+    @Override
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
         for (int slice = 0; slice < filter.getNrOfSlices(); ++slice) {
             for (int or = 0; or < output.getNrOfRows(); ++or) {
@@ -132,4 +135,10 @@ public class FMatrixOpCpu implements FMatrixOp {
     public void dsigmoid(imatrix O) {
         O.applyFunction(x -> 1 / (1 + (float) Math.exp(-x)));
     }
+
+    @Override
+    public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
 }

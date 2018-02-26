@@ -7,6 +7,8 @@ package dae.matrix.gpu;
 import dae.matrix.cpu.FMatrixOpCpu;
 import dae.matrix.fmatrix;
 import dae.matrix.fsubmatrix;
+import java.nio.FloatBuffer;
+import java.util.Random;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -104,6 +106,54 @@ public class FMatrixOpTest {
         assertMatrixEquals(output1, output2);
     }
 
+    /**
+     *
+     */
+    @Test
+    public void testConvolutionWithPadding() {
+
+        int nrOfFilters = 3;
+        int K = 5;
+        // stride is 1
+        int S = 1;
+        fmatrix filters = new fmatrix(K, K, nrOfFilters);
+        filters.applyCellFunction((int row, int column, int slice, float value) -> (slice + 1) * (row + column) * .1f);
+
+        // add padding to create output of the same size.
+        int P = (K - 1) / 2;
+        Random r = new Random();
+        int nzpRows = 6;
+        int nzpCols = 6;
+        fmatrix input = new fmatrix(nzpRows, nzpCols, 1, P);
+        input.applyFunction(x -> r.nextFloat());
+
+        int O_Col = 1 + (nzpCols - K + 2 * P) / S;
+        int O_Row = 1 + (nzpRows - K + 2 * P) / S;
+
+        fmatrix output1 = new fmatrix(O_Row, O_Col, nrOfFilters);
+        fmatrix output2 = new fmatrix(O_Row, O_Col, nrOfFilters);
+
+        long start1 = System.currentTimeMillis();
+        new FMatrixOpGpu().batchConvolve(input, filters, S, output1);
+        long end1 = System.currentTimeMillis();
+        System.out.println("Batch convolve - GPU time : " + (end1 - start1));
+
+        long start2 = System.currentTimeMillis();
+        new FMatrixOpCpu().batchConvolve(input, filters, S, output2);
+        long end2 = System.currentTimeMillis();
+        System.out.println("Batch convolve - CPU time : " + (end2 - start2));
+
+        System.out.println("input");
+        System.out.println(input);
+
+        System.out.println("output1");
+        System.out.println(output1);
+        System.out.println("output2");
+        System.out.println(output2);
+
+        assertMatrixEquals(output1, output2);
+    }
+
     private void assertMatrixEquals(fmatrix output1, fmatrix output2) {
         for (int s = 0; s < output1.getNrOfSlices(); ++s) {
             for (int r = 0; r < output1.getNrOfRows(); ++r) {
@@ -141,5 +191,38 @@ public class FMatrixOpTest {
         this.cpu.sgemm(1, op1, op2, 0, result2);
 
         assertMatrixEquals(result1, result2);
+    }
+
+    @Test
+    public void testCopy() {
+        fmatrix copy = fmatrix.random(1, 784, -5, +5);
+        fmatrix image = new fmatrix(28, 28);
+
+        fmatrix.rowVectorToMatrix(copy, image);
+
+        FloatBuffer source = copy.getHostData();
+        FloatBuffer dest = image.getHostData();
+
+        assertArrayEquals(source.array(), dest.array(), 0.0001f);
+
+        fmatrix testCopy = new fmatrix(1, 784);
+        fmatrix.matrixToRowVector(image, testCopy);
+        assertMatrixEquals(copy, testCopy);
+
+        // with zero padding.
+        fmatrix src2 = new fmatrix(1, 784, 1, 2);
+        Random r = new Random(System.currentTimeMillis());
+        src2.applyFunction(x -> r.nextFloat());
+        fmatrix dest2 = new fmatrix(28, 28, 1, 2);
+
+        fmatrix.rowVectorToMatrix(src2, dest2);
+        System.out.println(dest2);
+        fmatrix dest3 = new fmatrix(1, 784, 1, 2);
+        fmatrix.matrixToRowVector(dest2, dest3);
+
+        System.out.println("comparing ");
+        System.out.println(src2);
+        System.out.println(dest3);
+        assertMatrixEquals(src2, dest3);
     }
 }

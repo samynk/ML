@@ -92,6 +92,11 @@ public class tmatrix implements imatrix {
         return source.getNrOfSlices();
     }
 
+    @Override
+    public int getZeroPadding() {
+        return source.getZeroPadding();
+    }
+
     /**
      * Returns the total number of cells in this matrix.
      *
@@ -101,7 +106,7 @@ public class tmatrix implements imatrix {
     public int getSliceSize() {
         return source.getSliceSize();
     }
-    
+
     /**
      * Returns the number of cells in one slice of this matrix.
      *
@@ -189,7 +194,7 @@ public class tmatrix implements imatrix {
     public int getRowPadding() {
         return source.getRowPadding();
     }
-    
+
     /**
      * Get the number of columns on the device.
      *
@@ -209,4 +214,5 @@ public class tmatrix implements imatrix {
     public int getDeviceRows() {
         return source.getDeviceRows();
     }
+
 }

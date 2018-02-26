@@ -11,9 +11,9 @@ import java.util.Random;
  */
 public class DeepLayer {
 
-    private final AbstractLayer[] layers;
+    private final ILayer[] layers;
     private boolean validNetwork;
-    private LearningRate learningRate;
+    private final LearningRate learningRate;
 
     /**
      * Creates a new deep layer neural network with the given inputs and outputs
@@ -22,13 +22,13 @@ public class DeepLayer {
      * @param lr the learning rate calculator for this neural network.
      * @param layers the layers that will form the neural network.
      */
-    public DeepLayer(LearningRate lr, AbstractLayer... layers) {
+    public DeepLayer(LearningRate lr, ILayer... layers) {
         this.learningRate = lr;
         this.layers = layers;
         validNetwork = true;
         for (int i = 0; i < (layers.length - 1); ++i) {
-            AbstractLayer current = layers[i];
-            AbstractLayer next = layers[i + 1];
+            ILayer current = layers[i];
+            ILayer next = layers[i + 1];
             if (current.getNrOfOutputs() != next.getNrOfInputs()) {
                 validNetwork = false;
                 throw new IllegalArgumentException("Error while constructing a DeepLayer object.\n"
@@ -46,7 +46,7 @@ public class DeepLayer {
      * @param max the maximum value for the random weight.
      */
     public void randomizeWeights(Random r, float min, float max) {
-        for (AbstractLayer l : layers) {
+        for (ILayer l : layers) {
             l.randomizeWeights(r, min, max);
         }
     }
@@ -65,7 +65,7 @@ public class DeepLayer {
      *
      * @return the first layer.
      */
-    public AbstractLayer getFirstLayer() {
+    public ILayer getFirstLayer() {
         return layers[0];
     }
 
@@ -74,7 +74,7 @@ public class DeepLayer {
      *
      * @return the last layer.
      */
-    public AbstractLayer getLastLayer() {
+    public ILayer getLastLayer() {
         return layers[layers.length - 1];
     }
 
@@ -103,12 +103,12 @@ public class DeepLayer {
         float lr = this.learningRate.getLearningRate(iteration);
 
         for (int i = layers.length; i > 0; --i) {
-            AbstractLayer current = layers[i - 1];
+            ILayer current = layers[i - 1];
             // only calculate deltas for last layer.
             current.backpropagate(lr, i == layers.length);
 
             if ((i - 2) >= 0) {
-                AbstractLayer previous = layers[i - 2];
+                ILayer previous = layers[i - 2];
                 current.calculateErrors(previous.getErrors());
             }
         }
@@ -141,7 +141,7 @@ public class DeepLayer {
         int day = c.get(Calendar.DAY_OF_MONTH);
         int hour = c.get(Calendar.HOUR_OF_DAY);
         int mins = c.get(Calendar.MINUTE);
-        for (AbstractLayer l : this.layers) {
+        for (ILayer l : this.layers) {
             l.writeWeightImage("weight_" + year + "_" + month + "_" + day + "#" + hour + "_" + mins + "_" + layerIndex);
             ++layerIndex;
         }

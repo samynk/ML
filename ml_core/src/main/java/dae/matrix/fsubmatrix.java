@@ -249,4 +249,14 @@ public class fsubmatrix implements imatrix {
     public int getDeviceRows() {
         return source.getDeviceRows();
     }
+
+    /**
+     * The zero padding in the matrix. Not supported by this class, this method 
+     * always returns zero.
+     * @return the zero padding in the matrix.
+     */
+    @Override
+    public int getZeroPadding() {
+        return 0;
+    }
 }

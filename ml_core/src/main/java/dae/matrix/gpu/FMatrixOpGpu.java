@@ -39,7 +39,7 @@ import org.jocl.cl_platform_id;
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
-public class FMatrixOpGpu implements FMatrixOp{
+public class FMatrixOpGpu implements FMatrixOp {
 
     private static final cl_context context;
     private static final cl_command_queue commandQueue;
@@ -91,14 +91,13 @@ public class FMatrixOpGpu implements FMatrixOp{
         System.out.printf("CL_DEVICE_NAME: %s\n", deviceName);
 
         // Create a command-queue
-        
         commandQueue = clCreateCommandQueue(context, device, 0, null);
 
         convolvKernel = new ConvolvKernel("/kernels/convolve.kernel");
         convolvKernel.init(context, commandQueue);
-        
+
         activationKernel = new ActivationKernel();
-        activationKernel.init(context,commandQueue);
+        activationKernel.init(context, commandQueue);
 
         // CL_DEVICE_MAX_WORK_ITEM_SIZES
         maxWorkItemSizes = getSizes(device, CL_DEVICE_MAX_WORK_ITEM_SIZES, 3);
@@ -130,7 +129,7 @@ public class FMatrixOpGpu implements FMatrixOp{
         return new String(buffer, 0, buffer.length - 1);
     }
 
-     /**
+    /**
      * Calculates the following product : alpha A * B + beta * C, where A*B is a
      * matrix multiplication. The result is stored in C.
      *
@@ -182,7 +181,6 @@ public class FMatrixOpGpu implements FMatrixOp{
                 memC, 0, M,
                 commandQueue, event);
 
-        
         clEnqueueReadBuffer(commandQueue, memC, CL_TRUE, 0, M * N
                 * Sizeof.cl_float, C.getCLPointer(), 0, null, null);
     }
@@ -211,9 +209,23 @@ public class FMatrixOpGpu implements FMatrixOp{
      */
     @Override
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
-        convolvKernel.batchConvolv(input, filter, output);
+        convolvKernel.batchConvolv(input, filter, stride, output);
     }
-    
+
+    /**
+     * Applies a correlation filter on the input matrix, with the slices taken
+     * into account.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    @Override
+    public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        convolvKernel.batchCorrelate(input, filter, stride, output);
+    }
+
     /**
      * Calculates the sigmoid activation function. The result is stored back
      * into the given matrix.
@@ -242,7 +254,7 @@ public class FMatrixOpGpu implements FMatrixOp{
     }
 
     public static cl_mem createReadMem(imatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(context, CL_MEM_READ_ONLY, 
+        cl_mem mem = clCreateBuffer(context, CL_MEM_READ_ONLY,
                 (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
                 * Sizeof.cl_float, null, null);
         return mem;

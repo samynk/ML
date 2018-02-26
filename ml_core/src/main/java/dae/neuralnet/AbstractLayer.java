@@ -130,7 +130,7 @@ public abstract class AbstractLayer implements ILayer {
     }
 
     /**
-     * Gets the squared error of this layer.
+     * Gets the error vector of this layer.
      *
      * @return the error matrix of this layer, with the result expressed as a 1
      * x nrOfOutputs matrix.
@@ -168,6 +168,7 @@ public abstract class AbstractLayer implements ILayer {
      *
      * @param inputs the inputs to copy.
      */
+    @Override
     public void setInputs(imatrix inputs) {
         fmatrix.copyInto(inputs, this.inputs);
         for (int i = nrOfInputs; i < n; i++) {

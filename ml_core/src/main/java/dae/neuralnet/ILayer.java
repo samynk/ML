@@ -1,6 +1,7 @@
 package dae.neuralnet;
 
 import dae.matrix.fmatrix;
+import dae.matrix.imatrix;
 import java.util.Random;
 
 /**
@@ -24,6 +25,37 @@ public interface ILayer {
      * in the output matrix.
      */
     public void forward();
+
+    /**
+     * Sets the inputs of this layer.
+     *
+     * @param input the input of this layer.
+     */
+    public void setInputs(imatrix input);
+
+    /**
+     * Sets the ideal values for this layer.
+     *
+     * @param ideals the ideal values.
+     */
+    public void setIdeal(imatrix ideals);
+
+    /**
+     * Gets the error vector of this layer.
+     *
+     * @return the error matrix of this layer, with the result expressed as a 1
+     * x nrOfOutputs matrix.
+     */
+    public fmatrix getErrors();
+
+    /**
+     * Returns the matrix with the outputs of this neural network layer, with
+     * the application of the activation function.
+     *
+     * @return the output matrix of this layer, with the result expressed as a 1
+     * x nrOfOutputs matrix.
+     */
+    public fmatrix getOutputs();
 
     /**
      * Performs the back propagation algorithm with the provided ideals and the

@@ -40,15 +40,14 @@ __kernel void batchConvolution(
     __global float* output,
     const int2 iDim,
     const int2 fDim,
-    const int2 oDim
+    const int2 oDim,
+    const int stride
 )
 {
-    int gCol = get_global_id(0);
-    int gRow = get_global_id(1);
+    int gCol = get_global_id(0)* stride;
+    int gRow = get_global_id(1)* stride;
     int filterNr = get_global_id(2);
 
-   
-   
     int filterSliceOffset = fDim.x * fDim.y * filterNr;
     int outputSliceOffset = oDim.x * oDim.y * filterNr;
 
@@ -62,6 +61,41 @@ __kernel void batchConvolution(
             
             int filterColOffset = fCol * fDim.y;
             int filterI = fRow + filterColOffset + filterSliceOffset ;
+            sum += input[inputI] * filter[filterI];
+        }
+    }
+    output[ gRow + gCol * oDim.y + outputSliceOffset ] = sum;
+}
+
+__kernel void batchCorrelate(
+    const __global float* input,
+    __constant float* filter,
+    __global float* output,
+    const int2 iDim,
+    const int2 fDim,
+    const int2 oDim,
+    const int stride
+)
+{
+    int gCol = get_global_id(0)* stride;
+    int gRow = get_global_id(1)* stride;
+    int filterNr = get_global_id(2);
+
+    int filterSliceSize = fDim.x*fDim.y;
+    int filterSliceOffset = filterSliceSize * filterNr;
+    int outputSliceOffset = oDim.x * oDim.y * filterNr;
+    
+
+    float sum = 0;
+    for(int fRow = 0;  fRow < fDim.y; ++fRow){
+        int inputRow = gRow + fRow;   
+        for(int fCol = 0;fCol< fDim.x;++fCol){
+            int inputCol = gCol + fCol;
+            int inputColOffset = inputCol * iDim.y;
+            int inputI = inputRow  + inputColOffset;
+            
+            int filterColOffset = fCol * fDim.y;
+            int filterI = (filterSliceSize - fRow - filterColOffset) + filterSliceOffset ;
             sum += input[inputI] * filter[filterI];
         }
     }

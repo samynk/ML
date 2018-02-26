@@ -3,7 +3,6 @@ package dae.matrix;
 import dae.matrix.gpu.FMatrixOpGpu;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.activation.Function;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Random;
@@ -20,12 +19,13 @@ public strictfp class fmatrix implements imatrix {
     private final int columns;
     private final int slices;
 
+    private final int zeropadding;
+
     private final int sliceSize;
     private final int size;
 
     // private float[] data;
     private final FloatBuffer data;
-    private ByteBuffer bb;
     private cl_mem rMem;
     private cl_mem rwMem;
 
@@ -51,20 +51,46 @@ public strictfp class fmatrix implements imatrix {
      * @param slices the number of slices in the matrix.
      */
     public fmatrix(int rows, int columns, int slices) {
-        this.rows = rows;
-        this.columns = columns;
+        this(rows, columns, slices, 0);
+    }
+
+    /**
+     * Creates a new fmatrix object with the given rows and columns.
+     *
+     * The zero padding adds a virtual number of rows and columns around the
+     * fmatrix. This means that the zero padded row is a negative row on the
+     * upper side of the matrix and a negative column on the left side of the
+     * matrix. On the right and bottom side of the matrix the zero padded column
+     * and row have indexes greater than the number of rows and columns in this
+     * matrix.
+     *
+     * @param rows the number of rows in the matrix.
+     * @param columns the number of columns in the matrix.
+     * @param slices the number of slices in the matrix.
+     * @param zeropadding the zero padding to add around this matrix.
+     */
+    public fmatrix(int rows, int columns, int slices, int zeropadding) {
+        this.rows = rows + zeropadding * 2;
+        this.columns = columns + zeropadding * 2;
         this.slices = slices;
-        this.sliceSize = rows * columns;
+        this.zeropadding = zeropadding;
+        this.sliceSize = this.rows * this.columns;
         this.size = sliceSize * slices;
         data = FloatBuffer.allocate(size);
 
-        padding[0] = 32 - (columns % 32);
-        padding[1] = 32 - (rows % 32);
+        padding[0] = 32 - ((columns) % 32);
+        padding[1] = 32 - ((rows) % 32);
     }
 
+    /**
+     * Creates a new fmatrix from the given parameter.
+     *
+     * @param toCopy the fmatrix to copy.
+     */
     public fmatrix(fmatrix toCopy) {
-        this(toCopy.rows, toCopy.columns, toCopy.slices);
+        this(toCopy.rows, toCopy.columns, toCopy.slices, toCopy.zeropadding);
         toCopy.data.rewind();
+        this.data.rewind();
 
         while (this.data.hasRemaining()) {
             this.data.put(toCopy.data.get());
@@ -113,7 +139,27 @@ public strictfp class fmatrix implements imatrix {
      * @return the index of the cell in the 1D float backing array.
      */
     private int rcsToIndex(int r, int c, int s) {
-        return r + c * rows + s * sliceSize;
+        return rcToIndex(r, c) + s * sliceSize;
+    }
+
+    /**
+     * Checks if a row is inside the range that can be edited.
+     *
+     * @param row the row to check.
+     * @return true if the row can be edited, false otherwise.
+     */
+    private boolean checkRow(int row) {
+        return zeropadding <= row && row < getNrOfRows() - zeropadding;
+    }
+
+    /**
+     * Checks if a column is inside the range that can be edited.
+     *
+     * @param col the row to check.
+     * @return true if the column can be edited, false otherwise.
+     */
+    private boolean checkColumn(int col) {
+        return zeropadding <= col && col < getNrOfColumns() - zeropadding;
     }
 
     /**
@@ -152,7 +198,9 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public void set(int row, int column, float value) {
-        data.put(rcToIndex(row, column), value);
+        if (checkRow(row) && checkColumn(column)) {
+            data.put(rcToIndex(row, column), value);
+        }
     }
 
     /**
@@ -166,7 +214,9 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public void set(int row, int column, int slice, float value) {
-        data.put(rcsToIndex(row, column, slice), value);
+        if (checkRow(row) && checkColumn(column)) {
+            data.put(rcsToIndex(row, column, slice), value);
+        }
     }
 
     /**
@@ -191,8 +241,10 @@ public strictfp class fmatrix implements imatrix {
      * @param value the value.
      */
     public void setRow(int row, float value) {
-        for (int c = 0; c < columns; ++c) {
-            set(row, c, value);
+        if (checkRow(row)) {
+            for (int c = 0; c < columns; ++c) {
+                set(row, c, value);
+            }
         }
     }
 
@@ -205,8 +257,10 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public void setColumn(int column, float... values) {
         int maxIndex = Math.min(values.length, rows);
-        for (int row = 0; row < maxIndex; ++row) {
-            set(row, column, values[row]);
+        if (checkColumn(column)) {
+            for (int row = 0; row < maxIndex; ++row) {
+                set(row, column, values[row]);
+            }
         }
     }
 
@@ -219,7 +273,12 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public float get(int row, int column) {
-        return data.get(rcToIndex(row, column));
+        int index = rcToIndex(row, column);
+        if (index < data.limit()) {
+            return data.get(index);
+        } else {
+            return 0.0f;
+        }
     }
 
     /**
@@ -232,7 +291,12 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public float get(int row, int column, int slice) {
-        return data.get(rcsToIndex(row, column, slice));
+        int index = rcsToIndex(row, column, slice);
+        if (index < data.limit()) {
+            return data.get(index);
+        } else {
+            return 0.0f;
+        }
     }
 
     /**
@@ -433,6 +497,16 @@ public strictfp class fmatrix implements imatrix {
     }
 
     /**
+     * Gets the amount of zero padding in this matrix.
+     *
+     * @return the zero padding in this matrix.
+     */
+    @Override
+    public int getZeroPadding() {
+        return zeropadding;
+    }
+
+    /**
      * Returns the total number of cells in this matrix in a single slice.
      *
      * @return the total number of cells in the matrix in a single slice.
@@ -459,6 +533,7 @@ public strictfp class fmatrix implements imatrix {
      */
     public float sum() {
         float sum = 0.0f;
+
         for (int row = 0; row < getNrOfRows(); ++row) {
             for (int column = 0; column < getNrOfColumns(); ++column) {
                 sum += get(row, column);
@@ -594,10 +669,22 @@ public strictfp class fmatrix implements imatrix {
 
     @Override
     public void applyFunction(Function f) {
-        for (int i = 0; i < data.limit(); ++i) {
-            float v = data.get(i);
-            float vf = f.evaluate(v);
-            data.put(i, vf);
+        if (zeropadding == 0) {
+            for (int i = 0; i < data.limit(); ++i) {
+                float v = data.get(i);
+                float vf = f.evaluate(v);
+                data.put(i, vf);
+            }
+        } else {
+            for (int slice = 0; slice < slices; ++slice) {
+                for (int column = zeropadding; column < columns - zeropadding; ++column) {
+                    for (int row = zeropadding; row < rows - zeropadding; ++row) {
+                        float v = get(row, column, slice);
+                        float vf = f.evaluate(v);
+                        set(row, column, slice, vf);
+                    }
+                }
+            }
         }
     }
 
@@ -622,10 +709,12 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public imatrix copy() {
-        fmatrix result = new fmatrix(getNrOfRows(), getNrOfColumns());
-        for (int row = 0; row < getNrOfRows(); ++row) {
-            for (int column = 0; column < getNrOfColumns(); ++column) {
-                result.set(row, column, get(row, column));
+        fmatrix result = new fmatrix(getNrOfRows(), getNrOfColumns(), getNrOfSlices());
+        for (int slice = 0; slice < getNrOfSlices(); ++slice) {
+            for (int row = 0; row < getNrOfRows(); ++row) {
+                for (int column = 0; column < getNrOfColumns(); ++column) {
+                    result.set(row, column, slice, get(row, column, slice));
+                }
             }
         }
         return result;
@@ -817,6 +906,18 @@ public strictfp class fmatrix implements imatrix {
         matrixOp.dsigmoid(o);
     }
 
+    public static void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
+        matrixOp.batchConvolve(input, filter, stride, output);
+    }
+
+    public static void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        matrixOp.batchCorrelate(input, filter, stride, output);
+    }
+
+    public static void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
+        matrixOp.convolve(input, filter, stride, output);
+    }
+
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
         if (op1.getNrOfRows() != op2.getNrOfRows() || op1.getNrOfColumns() != op2.getNrOfColumns()) {
             System.out.println("DotDivide Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
@@ -1000,21 +1101,92 @@ public strictfp class fmatrix implements imatrix {
 
     public static void copyInto(imatrix toCopy, imatrix dest) {
         if (toCopy.isTransposed() == dest.isTransposed()
-                && equalDimension(toCopy, dest)) {
+                && equalDimension(toCopy, dest) && toCopy.getZeroPadding() == dest.getZeroPadding()) {
             FloatBuffer srcData = toCopy.getHostData();
             FloatBuffer destData = dest.getHostData();
             srcData.rewind();
             destData.rewind();
-
             destData.put(srcData);
 
         } else {
-            int maxRow = toCopy.getNrOfRows() < dest.getNrOfRows() ? toCopy.getNrOfRows() : dest.getNrOfRows();
-            int maxColumn = toCopy.getNrOfColumns() < dest.getNrOfColumns() ? toCopy.getNrOfColumns() : dest.getNrOfColumns();
+            int zpSrc = toCopy.getZeroPadding();
+            int zpDest = dest.getZeroPadding();
+
+            int eSrcRows = toCopy.getNrOfRows() - 2 * zpSrc;
+            int eDstRows = dest.getNrOfRows() - 2 * zpSrc;
+
+            int eSrcCols = toCopy.getNrOfColumns() - 2 * zpDest;
+            int eDstCols = dest.getNrOfColumns() - 2 * zpDest;
+
+            int maxRow = eSrcRows < eDstRows ? eSrcRows : eDstRows;
+            int maxCol = eSrcCols < eDstCols ? eSrcCols : eDstCols;
             for (int row = 0; row < maxRow; ++row) {
-                for (int column = 0; column < maxColumn; ++column) {
-                    dest.set(row, column, toCopy.get(row, column));
+                for (int column = 0; column < maxCol; ++column) {
+                    dest.set(
+                            row + zpDest, column + zpDest,
+                            toCopy.get(row + zpSrc, column + zpSrc)
+                    );
                 }
+            }
+        }
+    }
+
+    /**
+     * Copies the first row of the source matrix into the destination matrix
+     * according to a column major ordering.
+     *
+     * @param source the source matrix.
+     * @param dest the destination matrix.
+     */
+    public static void rowVectorToMatrix(imatrix source, imatrix dest) {
+        int zp = dest.getZeroPadding();
+        int eDstRows = dest.getNrOfRows() - zp * 2;
+        int eDstCols = dest.getNrOfColumns() - zp * 2;
+        int sliceSize = eDstRows * eDstCols;
+
+        int zpSrc = source.getZeroPadding();
+        int eSrcCols = source.getNrOfColumns() - zp;
+
+        for (int i = zpSrc; i < eSrcCols; ++i) {
+            float tc = source.get(zpSrc, i);
+            int ei = i - zpSrc;
+            int slice = ei / sliceSize;
+            int sliceIndex = ei % sliceSize;
+            int row = sliceIndex % eDstCols;
+            int col = sliceIndex / eDstCols;
+            dest.set(row + zp, col + zp, slice, tc);
+        }
+    }
+
+    /**
+     * Copies the source matrix into the first row of the destination matrix
+     * according to column major ordering.
+     *
+     * @param source the matrix to copy.
+     * @param dest the destination of the
+     */
+    public static void matrixToRowVector(imatrix source, imatrix dest) {
+        if (source.getZeroPadding() == 0 && dest.getZeroPadding() == 0) {
+            FloatBuffer src = source.getHostData();
+            FloatBuffer dst = dest.getHostData();
+            int copies = Math.min(source.getSize(), dest.getNrOfColumns());
+            dst.rewind();
+            dst.put(src.array(), 0, copies);
+        } else {
+            int zpSrc = source.getZeroPadding();
+            int eRows = source.getNrOfRows() - zpSrc * 2;
+            int eCols = source.getNrOfColumns() - zpSrc * 2;
+            int sliceSize = eRows * eCols;
+
+            int zpDest = dest.getZeroPadding();
+
+            for (int i = zpDest; i < dest.getNrOfColumns() - zpDest; ++i) {
+                int slice = (i - zpDest) / sliceSize;
+                int sliceIndex = (i - zpDest) % sliceSize;
+                int row = sliceIndex % eCols;
+                int col = sliceIndex / eCols;
+                float tc = source.get(row + zpDest, col + zpDest, slice);
+                dest.set(zpDest, i, tc);
             }
         }
     }
