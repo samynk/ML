@@ -75,7 +75,7 @@ public class TestDigitRecognition1 {
             target.reset();
             target.set(0, digit, 1);
 
-            dl.train(i, image, target);
+            dl.train(i, image, target, TrainingMode.STOCHASTIC);
         }
 
         testDigitRecognition(dl, 1, r);
@@ -167,10 +167,10 @@ public class TestDigitRecognition1 {
                 int digit = (int) trainSetLabels.get(0, nextImage);
                 target.set(b, digit, 1);
             }
-            dl.train(i, image, target);
+            dl.train(i, image, target, TrainingMode.BATCH);
         }
-
-        dl.writeWeightImages();
+        String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
+        dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
         testDigitRecognition(dl, BATCH_SIZE, r);
     }
 

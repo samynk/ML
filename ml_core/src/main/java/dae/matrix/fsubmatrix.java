@@ -1,5 +1,6 @@
 package dae.matrix;
 
+import dae.matrix.gpu.DeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
@@ -54,6 +55,27 @@ public class fsubmatrix implements imatrix {
         this.slices = Math.min(source.getNrOfSlices(), Math.max(slices, 0));
     }
 
+    /**
+     * The zero padding in the matrix. Not supported by this class, this method
+     * always returns zero.
+     *
+     * @return the zero padding in the matrix.
+     */
+    @Override
+    public int getZeroPadding() {
+        return 0;
+    }
+
+    /**
+     * Checks if this matrix is a row vector.
+     *
+     * @return true if the matrix is a row vector, false otherwise.
+     */
+    @Override
+    public boolean isRowVector() {
+        return rows == 1 && slices == 1;
+    }
+
     @Override
     public void set(int row, int column, float value) {
         source.set(row - rb, column - cb, value);
@@ -98,7 +120,7 @@ public class fsubmatrix implements imatrix {
     public float get(int row, int column) {
         return source.get(row - rb, column - cb);
     }
-    
+
     @Override
     public float get(int row, int column, int slice) {
         return source.get(row - rb, column - cb);
@@ -113,19 +135,20 @@ public class fsubmatrix implements imatrix {
     public int getNrOfColumns() {
         return columns;
     }
-    
+
     @Override
     public int getNrOfSlices() {
         return slices;
     }
-    
+
     /**
      * Returns the size of one slice in this matrix.
+     *
      * @return the size of one slice in this matrix.
      */
     @Override
-    public int getSize(){
-        return rows* columns;
+    public int getSize() {
+        return rows * columns;
     }
 
     /**
@@ -195,24 +218,19 @@ public class fsubmatrix implements imatrix {
         return source.getHostData();
     }
 
+    /**
+     * Returns the DeviceBuffer object.
+     *
+     * @return the DeviceBuffer object.
+     */
+    @Override
+    public DeviceBuffer getDeviceBuffer() {
+        return this.source.getDeviceBuffer();
+    }
+
     @Override
     public boolean isTransposed() {
         return source.isTransposed();
-    }
-
-    @Override
-    public cl_mem getCLReadMem() {
-        return source.getCLReadMem();
-    }
-
-    @Override
-    public cl_mem getCLReadWriteMem() {
-        return source.getCLReadWriteMem();
-    }
-
-    @Override
-    public Pointer getCLPointer() {
-        return source.getCLPointer();
     }
 
     @Override
@@ -220,43 +238,4 @@ public class fsubmatrix implements imatrix {
         return fmatrix.print(this);
     }
 
-    @Override
-    public int getColPadding() {
-        return source.getColPadding();
-    }
-
-    @Override
-    public int getRowPadding() {
-        return source.getRowPadding();
-    }
-
-    /**
-     * Get the number of columns on the device.
-     *
-     * @return the number of columns on the gpu device.
-     */
-    @Override
-    public int getDeviceColumns() {
-        return source.getDeviceColumns();
-    }
-
-    /**
-     * Get the number of rows on the device.
-     *
-     * @return the number of rows on the gpu device.
-     */
-    @Override
-    public int getDeviceRows() {
-        return source.getDeviceRows();
-    }
-
-    /**
-     * The zero padding in the matrix. Not supported by this class, this method 
-     * always returns zero.
-     * @return the zero padding in the matrix.
-     */
-    @Override
-    public int getZeroPadding() {
-        return 0;
-    }
 }

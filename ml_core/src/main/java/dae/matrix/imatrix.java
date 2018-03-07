@@ -1,7 +1,7 @@
 package dae.matrix;
 
+import dae.matrix.gpu.DeviceBuffer;
 import dae.neuralnet.activation.Function;
-import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -11,6 +11,13 @@ import org.jocl.cl_mem;
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public interface imatrix {
+
+    /**
+     * Checks if this matrix is a row vector.
+     *
+     * @return true if the matrix is a row vector, false otherwise.
+     */
+    public boolean isRowVector();
 
     /**
      * Sets a cell in this matrix to the given value.
@@ -215,46 +222,9 @@ public interface imatrix {
     public boolean isTransposed();
 
     /**
-     * Gets the cl_mem read only buffer associated with this matrix.
-     *
-     * @return a cl_mem object.
+     * Returns the DeviceBuffer object.
+     * @return the DeviceBuffer object.
      */
-    public cl_mem getCLReadMem();
+    public DeviceBuffer getDeviceBuffer();
 
-    /**
-     * Gets the cl_mem buffer associated with this matrix.
-     *
-     * @return a cl_mem object.
-     */
-    public cl_mem getCLReadWriteMem();
-
-    /**
-     * Get the padding for the columns.
-     *
-     * @return the padding for the columns.
-     */
-    public int getColPadding();
-
-    /**
-     * Get the padding for the rows.
-     *
-     * @return the padding for the rows.
-     */
-    public int getRowPadding();
-
-    /**
-     * Get the number of columns on the device.
-     *
-     * @return the number of columns on the gpu device.
-     */
-    public int getDeviceColumns();
-
-    /**
-     * Get the number of rows on the device.
-     *
-     * @return the number of rows on the gpu device.
-     */
-    public int getDeviceRows();
-
-    public Pointer getCLPointer();
 }

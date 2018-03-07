@@ -5,10 +5,12 @@
 package dae.matrix.gpu;
 
 import dae.matrix.imatrix;
+import dae.matrix.integer.intmatrix;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import static org.jocl.CL.*;
+import org.jocl.Pointer;
 import org.jocl.cl_command_queue;
 import org.jocl.cl_context;
 import org.jocl.cl_kernel;
@@ -45,6 +47,14 @@ public class OpenCLKernel {
         });
         kernelSource = sb.toString();
     }
+    
+    /**
+     * Returns the kernel file location.
+     * @return a String object with the location of the kernel file.
+     */
+    public String getKernelFile(){
+        return kernelFile;
+    }
 
     /**
      * Initializes the kernel
@@ -61,105 +71,7 @@ public class OpenCLKernel {
         clBuildProgram(program, 0, null, compileOptions, null, null);
     }
 
-    /**
-     * Writes to a buffer object on the device that is defined as a read only
-     * buffer on the device.
-     *
-     * @param m the matrix to upload into the device.
-     * @return the buffer object that is associated with the device buffer.
-     */
-    protected final cl_mem uploadRMatrix(imatrix m) {
-        cl_mem buffer = m.getCLReadMem();
-        enqueueWriteMatrix(m, buffer);
-        return buffer;
-    }
 
-    /**
-     * Writes to a buffer object on the device that is defined as a read/write
-     * buffer on the device.
-     *
-     * @param m the matrix to upload into the device.
-     * @return the buffer object that is associated with the device buffer.
-     */
-    protected final cl_mem uploadRWMatrix(imatrix m) {
-        cl_mem buffer = m.getCLReadWriteMem();
-        enqueueWriteMatrix(m, buffer);
-        return buffer;
-    }
-
-    /**
-     * Writes the matrix m into the provided device buffer on the device.
-     *
-     * @param m the matrix m to upload into the device.
-     * @param deviceBuffer the buffer object that is associated with the
-     * buffer on the device.
-     * @return
-     */
-    private void enqueueWriteMatrix(imatrix m, cl_mem deviceBuffer) {
-        int deviceCols = m.getDeviceColumns();
-        int deviceRows = m.getDeviceRows();
-
-        long region[] = new long[]{m.getNrOfColumns() * Float.BYTES, m.getNrOfRows(), m.getNrOfSlices()};
-        clEnqueueWriteBufferRect(commandQueue, deviceBuffer, CL_TRUE,
-                new long[]{0, 0, 0},
-                new long[]{0, 0, 0},
-                region,
-                // device
-                deviceCols * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
-                // host
-                m.getNrOfColumns() * Float.BYTES, m.getSliceSize() * Float.BYTES,
-                m.getCLPointer(),
-                0,
-                null,
-                null);
-    }
-
-    /**
-     * Downloads a padded matrix from the device that was used as a read only
-     * buffer into the matrix m.
-     *
-     * @param m the padded matrix to download from the device
-     */
-    protected final void downloadRMatrix(imatrix m) {
-        cl_mem memOutput = m.getCLReadMem();
-        enqueueReadMatrix(m, memOutput);
-    }
-
-    /**
-     * Downloads a padded matrix that was used as a read write buffer into the
-     * matrix m.
-     *
-     * @param m the padded matrix to download from the device
-     */
-    protected final void downloadRWMatrix(imatrix m) {
-        cl_mem memOutput = m.getCLReadWriteMem();
-        enqueueReadMatrix(m, memOutput);
-    }
-
-    /**
-     * Reads a matrix from the referenced device buffer object.
-     *
-     * @param m the matrix to read the buffer into.
-     * @param deviceBuffer the device buffer to read the data from.
-     */
-    private void enqueueReadMatrix(imatrix m, cl_mem deviceBuffer) {
-        int deviceCols = m.getDeviceColumns();
-        int deviceRows = m.getDeviceRows();
-
-        long region[] = new long[]{m.getNrOfColumns() * Float.BYTES, m.getNrOfRows(), m.getNrOfSlices()};
-        clEnqueueReadBufferRect(commandQueue, deviceBuffer, CL_TRUE,
-                new long[]{0, 0, 0},
-                new long[]{0, 0, 0},
-                region,
-                // device
-                deviceCols * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
-                // host
-                m.getNrOfColumns() * Float.BYTES, m.getSliceSize() * Float.BYTES,
-                m.getCLPointer(),
-                0,
-                null,
-                null);
-    }
 
     /**
      * Creates a kernel for a specific method in the source file.

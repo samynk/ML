@@ -4,6 +4,7 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
+import dae.neuralnet.cost.CostFunction;
 import dae.neuralnet.matrix.MatrixFactory;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -27,12 +28,21 @@ import javax.imageio.ImageIO;
  * @author Koen Samyn
  */
 public class Layer extends AbstractLayer {
-
+    
     private final imatrix weights;
+    
     private final imatrix tweights;
+    
     private imatrix constraint;
-
+    
     private final imatrix deltaWeights;
+    private final imatrix batchDeltaWeights;
+    
+    private float dropRate = 0;
+    private boolean dropRateSet = false;
+    private Random dropRandom;
+    private imatrix dropWeightMatrix;
+    private imatrix tDropWeightMatrix;
 
     /**
      * Creates a layer with a given number of inputs, biases and outputs.
@@ -110,6 +120,21 @@ public class Layer extends AbstractLayer {
         this.weights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
         this.tweights = new tmatrix(weights);
         this.deltaWeights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
+        this.batchDeltaWeights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
+    }
+
+    /**
+     * Sets the dropRate for the weights in this layer.
+     *
+     * @param dropRate the drop rate for the weights
+     */
+    public void setDropRate(float dropRate) {
+        this.dropRate = dropRate;
+        this.dropRateSet = true;
+        this.dropRandom = new Random(System.currentTimeMillis());
+        this.constraint = new fmatrix(getNrOfInputs() + getNrOfBiases(), getNrOfOutputs());
+        this.dropWeightMatrix = new fmatrix(getNrOfInputs() + getNrOfBiases(), getNrOfOutputs());
+        this.tDropWeightMatrix = new tmatrix(dropWeightMatrix);
     }
 
     /**
@@ -146,18 +171,25 @@ public class Layer extends AbstractLayer {
     @Override
     public void forward() {
         outputs.reset();
-        fmatrix.sgemm(1, inputs, weights, 0, outputs);
-
-        // fmatrix.multiply(outputs, inputs, weights);
-        //outputs.applyFunction(this.activation);
-        switch(function){
-            case SOFTMAX: outputs.softMaxPerRow();break;
-            //case SIGMOID: fmatrix.sigmoid(outputs);break;
+        imatrix weightMatrix = weights;
+        if (dropRateSet) {
+            this.constraint.applyFunction(x -> dropRandom.nextFloat() > dropRate ? 1 : 0);
+            fmatrix.dotmultiply(dropWeightMatrix, constraint, weights);
+            weightMatrix = dropWeightMatrix;
+        }
+        
+        fmatrix.sgemm(1, inputs, weightMatrix, 0, outputs);
+        
+        switch (function) {
+            case SOFTMAX:
+                fmatrix.softMaxPerRow(outputs);
+                break;
+            
             default:
                 outputs.applyFunction(this.activation);
         }
     }
-
+    
     @Override
     public void calculateNewWeights(float learningRate) {
 //        // 4.a Multiply the transposes inputs with the deltas.
@@ -171,8 +203,11 @@ public class Layer extends AbstractLayer {
 //        }
 //        // 4.d deltaWeights now holds the new values for the weights.
 //        fmatrix.dotsubtract(deltaWeights, weights, deltaWeights);
-        fmatrix.copyInto(weights, deltaWeights);
-        fmatrix.sgemm(-learningRate / getBatchSize(), tinputs, deltas, 1, deltaWeights);
+        fmatrix.sgemm(-1, tinputs, deltas, 0, deltaWeights);
+        if (dropRateSet) {
+            fmatrix.dotmultiply(deltaWeights, deltaWeights, constraint);
+        }
+        fmatrix.dotadd(batchDeltaWeights, batchDeltaWeights, deltaWeights);
     }
 
     /**
@@ -183,13 +218,18 @@ public class Layer extends AbstractLayer {
     @Override
     public void calculateErrors(fmatrix errors) {
         errors.reset();
-        fmatrix.sgemm(1, this.deltas, tweights, 0, errors);
+        imatrix t = tweights;
+        if (dropRateSet) {
+            t = tDropWeightMatrix;
+        }
+        fmatrix.sgemm(1, this.deltas, t, 0, errors);
         //fmatrix.multiply(deltas, this.deltas, this.tweights);
     }
-
+    
     @Override
-    public void adaptWeights() {
-        fmatrix.copyInto(deltaWeights, weights);
+    public void adaptWeights(float factor) {
+        fmatrix.dotadd(weights, 1, weights, factor, batchDeltaWeights);
+        batchDeltaWeights.applyFunction(x -> 0.0f);
     }
 
     /**
@@ -201,13 +241,13 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void randomizeWeights(Random r, float min, float max) {
-        weights.applyFunction(x -> min + r.nextFloat()*(max-min));
+        weights.applyFunction(x -> min + r.nextFloat() * (max - min));
     }
-
+    
     public void printInputs() {
         System.out.println(inputs.toString());
     }
-
+    
     @Override
     public void writeWeightImage(String file) {
         float max = weights.max().value;
@@ -218,23 +258,28 @@ public class Layer extends AbstractLayer {
         
         imatrix weightCopy = weights.copy();
         weightCopy.applyFunction(x -> (x - min) * factor);
-
+        
         BufferedImage bi = new BufferedImage(weights.getNrOfColumns(), weights.getNrOfRows(), BufferedImage.TYPE_BYTE_GRAY);
         for (int r = 0; r < weightCopy.getNrOfRows(); ++r) {
             for (int c = 0; c < weightCopy.getNrOfColumns(); ++c) {
                 float p = weightCopy.get(r, c);
                 int pi = (int) Math.round(p);
-                bi.setRGB(c, r, (pi << 16) + (pi << 8) +  pi);
+                bi.setRGB(c, r, (pi << 16) + (pi << 8) + pi);
             }
         }
         
         String homeDir = System.getProperty("user.home");
-        Path exportPath = Paths.get(homeDir,".nn",file+".png");
+        Path exportPath = Paths.get(homeDir, ".nn", file + ".png");
         try {
             Files.createDirectories(exportPath);
-            ImageIO.write(bi, "png",exportPath.toFile());
+            ImageIO.write(bi, "png", exportPath.toFile());
         } catch (IOException ex) {
             Logger.getLogger(Layer.class.getName()).log(Level.SEVERE, null, ex);
         }
+    }
+    
+    @Override
+    public void writeOutputImage(String file) {
+        
     }
 }

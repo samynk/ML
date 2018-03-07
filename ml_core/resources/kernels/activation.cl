@@ -5,8 +5,9 @@ __kernel void sigmoid(
 {
     int gCol = get_global_id(0);
     int gRow = get_global_id(1);
+    int slice = get_global_id(2);
     
-    int index = gRow+gCol*oDim.y;
+    int index = gRow+gCol*oDim.y+slice*oDim.x*oDim.y;
     float o = O[index]; 
     O[index] = 1.0f/(1.0f+exp(-o));
 }

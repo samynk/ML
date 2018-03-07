@@ -2,6 +2,7 @@ package dae.neuralnet;
 
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
+import dae.neuralnet.cost.CostFunction;
 import java.util.Random;
 
 /**
@@ -9,6 +10,20 @@ import java.util.Random;
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public interface ILayer {
+
+    /**
+     * Set the name of this layer.
+     *
+     * @param name the name of the layer.
+     */
+    public void setName(String name);
+
+    /**
+     * Returns the name of this layer.
+     *
+     * @return the name of the layer.
+     */
+    public String getName();
 
     /**
      * @return the total number of inputs.
@@ -63,10 +78,8 @@ public interface ILayer {
      * the actual weights.
      *
      * @param learningRate the learning rate for the back propagation.
-     * @param calculateErrors calculate the deltas by subtracting the ideals
-     * from the outputs.
      */
-    public void backpropagate(float learningRate, boolean calculateErrors);
+    public void backpropagate(float learningRate);
 
     /**
      * Calculates the new weights for the system given the learning rate. This
@@ -86,8 +99,9 @@ public interface ILayer {
 
     /**
      * Apply the changes in weights to the weight matrix.
+     * @param factor the factor with which to multiply the weight deltas with.
      */
-    public void adaptWeights();
+    public void adaptWeights(float factor);
 
     /**
      * Randomize all the weights.
@@ -104,4 +118,11 @@ public interface ILayer {
      * @param file the file location to write to.
      */
     public void writeWeightImage(String file);
+
+    /**
+     * Writes the weights as an image to the given file location.
+     *
+     * @param file the file location to write to.
+     */
+    public void writeOutputImage(String file);
 }

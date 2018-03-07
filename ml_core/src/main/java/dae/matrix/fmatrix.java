@@ -1,13 +1,15 @@
 package dae.matrix;
 
+import dae.matrix.gpu.DeviceBuffer;
 import dae.matrix.gpu.FMatrixOpGpu;
+import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Random;
-import org.jocl.Pointer;
-import org.jocl.cl_mem;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -26,10 +28,7 @@ public strictfp class fmatrix implements imatrix {
 
     // private float[] data;
     private final FloatBuffer data;
-    private cl_mem rMem;
-    private cl_mem rwMem;
-
-    private final int[] padding = new int[2];
+    private DeviceBuffer deviceBuffer;
 
     private static FMatrixOp matrixOp = new FMatrixOpGpu();
 
@@ -70,16 +69,16 @@ public strictfp class fmatrix implements imatrix {
      * @param zeropadding the zero padding to add around this matrix.
      */
     public fmatrix(int rows, int columns, int slices, int zeropadding) {
-        this.rows = rows + zeropadding * 2;
-        this.columns = columns + zeropadding * 2;
+        this.rows = rows;
+        this.columns = columns;
         this.slices = slices;
         this.zeropadding = zeropadding;
         this.sliceSize = this.rows * this.columns;
         this.size = sliceSize * slices;
         data = FloatBuffer.allocate(size);
 
-        padding[0] = 32 - ((columns) % 32);
-        padding[1] = 32 - ((rows) % 32);
+        deviceBuffer = new DeviceBuffer(this);
+
     }
 
     /**
@@ -95,6 +94,16 @@ public strictfp class fmatrix implements imatrix {
         while (this.data.hasRemaining()) {
             this.data.put(toCopy.data.get());
         }
+    }
+
+    /**
+     * Checks if this matrix is a row vector.
+     *
+     * @return true if the matrix is a row vector, false otherwise.
+     */
+    @Override
+    public boolean isRowVector() {
+        return rows == 1 && slices == 1;
     }
 
     /**
@@ -143,26 +152,6 @@ public strictfp class fmatrix implements imatrix {
     }
 
     /**
-     * Checks if a row is inside the range that can be edited.
-     *
-     * @param row the row to check.
-     * @return true if the row can be edited, false otherwise.
-     */
-    private boolean checkRow(int row) {
-        return zeropadding <= row && row < getNrOfRows() - zeropadding;
-    }
-
-    /**
-     * Checks if a column is inside the range that can be edited.
-     *
-     * @param col the row to check.
-     * @return true if the column can be edited, false otherwise.
-     */
-    private boolean checkColumn(int col) {
-        return zeropadding <= col && col < getNrOfColumns() - zeropadding;
-    }
-
-    /**
      * Checks if this is a transposed view on the source data.
      *
      * @return true if this is transposed view of the source data, false
@@ -198,9 +187,7 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public void set(int row, int column, float value) {
-        if (checkRow(row) && checkColumn(column)) {
-            data.put(rcToIndex(row, column), value);
-        }
+        data.put(rcToIndex(row, column), value);
     }
 
     /**
@@ -214,9 +201,7 @@ public strictfp class fmatrix implements imatrix {
      */
     @Override
     public void set(int row, int column, int slice, float value) {
-        if (checkRow(row) && checkColumn(column)) {
-            data.put(rcsToIndex(row, column, slice), value);
-        }
+        data.put(rcsToIndex(row, column, slice), value);
     }
 
     /**
@@ -241,10 +226,8 @@ public strictfp class fmatrix implements imatrix {
      * @param value the value.
      */
     public void setRow(int row, float value) {
-        if (checkRow(row)) {
-            for (int c = 0; c < columns; ++c) {
-                set(row, c, value);
-            }
+        for (int c = 0; c < columns; ++c) {
+            set(row, c, value);
         }
     }
 
@@ -257,11 +240,10 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public void setColumn(int column, float... values) {
         int maxIndex = Math.min(values.length, rows);
-        if (checkColumn(column)) {
-            for (int row = 0; row < maxIndex; ++row) {
-                set(row, column, values[row]);
-            }
+        for (int row = 0; row < maxIndex; ++row) {
+            set(row, column, values[row]);
         }
+
     }
 
     /**
@@ -340,14 +322,16 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public Cell max(Cell result) {
         float max = Float.MIN_VALUE;
-        for (int row = 0; row < getNrOfRows(); ++row) {
-            for (int column = 0; column < getNrOfColumns(); ++column) {
-                float value = this.get(row, column);
-                if (value > max) {
-                    max = value;
-                    result.value = max;
-                    result.row = row;
-                    result.column = column;
+        for (int slice = 0; slice < getNrOfSlices(); ++slice) {
+            for (int row = 0; row < getNrOfRows(); ++row) {
+                for (int column = 0; column < getNrOfColumns(); ++column) {
+                    float value = this.get(row, column);
+                    if (value > max) {
+                        max = value;
+                        result.value = max;
+                        result.row = row;
+                        result.column = column;
+                    }
                 }
             }
         }
@@ -374,14 +358,16 @@ public strictfp class fmatrix implements imatrix {
     @Override
     public Cell min(Cell result) {
         float min = Float.MAX_VALUE;
-        for (int row = 0; row < getNrOfRows(); ++row) {
-            for (int column = 0; column < getNrOfColumns(); ++column) {
-                float value = this.get(row, column);
-                if (value < min) {
-                    min = value;
-                    result.value = min;
-                    result.row = row;
-                    result.column = column;
+        for (int slice = 0; slice < getNrOfSlices(); ++slice) {
+            for (int row = 0; row < getNrOfRows(); ++row) {
+                for (int column = 0; column < getNrOfColumns(); ++column) {
+                    float value = this.get(row, column);
+                    if (value < min) {
+                        min = value;
+                        result.value = min;
+                        result.row = row;
+                        result.column = column;
+                    }
                 }
             }
         }
@@ -652,39 +638,30 @@ public strictfp class fmatrix implements imatrix {
         }
     }
 
-    public void softMaxPerRow() {
-        exp();
-        for (int r = 0; r < getNrOfRows(); ++r) {
-            float sum = 0;
-            for (int c = 0; c < getNrOfColumns(); ++c) {
-                float value = get(r, c);
-                sum += value;
-            }
-            for (int c = 0; c < getNrOfColumns(); ++c) {
-                float value = get(r, c) / sum;
-                set(r, c, value);
+    public static void softMaxPerRow(imatrix m) {
+        m.applyFunction(x -> (float) Math.exp(x));
+
+        for (int slices = 0; slices < m.getNrOfSlices(); ++slices) {
+            for (int r = 0; r < m.getNrOfRows(); ++r) {
+                float sum = 0;
+                for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                    float value = m.get(r, c);
+                    sum += value;
+                }
+                for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                    float value = m.get(r, c) / sum;
+                    m.set(r, c, value);
+                }
             }
         }
     }
 
     @Override
     public void applyFunction(Function f) {
-        if (zeropadding == 0) {
-            for (int i = 0; i < data.limit(); ++i) {
-                float v = data.get(i);
-                float vf = f.evaluate(v);
-                data.put(i, vf);
-            }
-        } else {
-            for (int slice = 0; slice < slices; ++slice) {
-                for (int column = zeropadding; column < columns - zeropadding; ++column) {
-                    for (int row = zeropadding; row < rows - zeropadding; ++row) {
-                        float v = get(row, column, slice);
-                        float vf = f.evaluate(v);
-                        set(row, column, slice, vf);
-                    }
-                }
-            }
+        for (int i = 0; i < data.limit(); ++i) {
+            float v = data.get(i);
+            float vf = f.evaluate(v);
+            data.put(i, vf);
         }
     }
 
@@ -849,37 +826,20 @@ public strictfp class fmatrix implements imatrix {
         return result;
     }
 
-    public static fmatrix dotmultiply(fmatrix op1, fmatrix op2) {
-        if (op1.getNrOfRows() != op2.getNrOfRows() || op1.getNrOfColumns() != op2.getNrOfColumns()) {
-            System.out.println("DotMultiply Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
+    public static imatrix dotmultiply(imatrix op1, imatrix op2) {
+        if (!equalDimension(op1, op2)) {
             return null;
         }
-        fmatrix result = new fmatrix(op1.getNrOfRows(), op2.getNrOfRows());
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row, column);
-                float op2value = op2.get(row, column);
-                result.set(row, column, op1value * op2value);
-            }
-        }
-        return result;
+        fmatrix result = new fmatrix(op1.getNrOfRows(), op1.getNrOfColumns(), op1.getNrOfSlices());
+        return dotmultiply(result, op1, op2);
     }
 
     public static imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2) {
-        if (result.getNrOfRows() != op2.getNrOfRows() || result.getNrOfColumns() != op2.getNrOfColumns()
-                || op1.getNrOfRows() != op2.getNrOfRows() || op1.getNrOfColumns() != op2.getNrOfColumns()) {
-            System.out.println("DotMultiply Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
+        if (equalDimension(op1, op2) && equalDimension(result, op1)) {
+            return matrixOp.dotmultiply(result, op1, op2);
+        } else {
             return null;
         }
-        //fmatrix result = new fmatrix(op1.getNrOfRows(), op2.getNrOfRows());
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row, column);
-                float op2value = op2.get(row, column);
-                result.set(row, column, op1value * op2value);
-            }
-        }
-        return result;
     }
 
     public static fmatrix dotmultiply(fmatrix op1, float op2) {
@@ -914,8 +874,46 @@ public strictfp class fmatrix implements imatrix {
         matrixOp.batchCorrelate(input, filter, stride, output);
     }
 
+    public static void batchBackpropCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        matrixOp.batchBackpropCorrelate(input, filter, stride, output);
+    }
+
     public static void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
         matrixOp.convolve(input, filter, stride, output);
+    }
+
+    /**
+     * Applies a max pool on the input matrix and stores it into the output
+     * matrix. It is assumed that the dimensions of the output matrix are
+     * dividers of the dimensions of the input matrix.
+     *
+     * The resulting maskLayer can be used to back propagate deltas to the
+     * previous layer. The maskLayer will be filled with zeros and the location
+     * of the maximum per filter will be set to 1.
+     *
+     * @param input the input matrix.
+     * @param output the output matrix.
+     * @param maskLayer a matrix with the same dimension as the input layer
+     * which can be used to determine which input pixels contributed to the
+     * output.
+     */
+    public static void batchMaxPool(imatrix input, imatrix output, intmatrix maskLayer) {
+        matrixOp.batchMaxPool(input, output, maskLayer);
+    }
+
+    /**
+     * Scales up the input matrix to the dimensions of the output matrix. Only
+     * the cells that are defined in the masking layer are applied to output.
+     *
+     * @param input the input matrix.
+     * @param maskLayer a matrix with the same dimension as the input layer
+     * which can be used to determine which input pixels contributed to the
+     * output.
+     * @param output the output matrix.
+     *
+     */
+    public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
+        matrixOp.batchBackpropMaxPool(input, maskLayer, output);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -968,18 +966,16 @@ public strictfp class fmatrix implements imatrix {
 
     public static imatrix dotadd(imatrix result, imatrix op1, imatrix op2) {
         if (!equalDimension(op1, op2) || !equalDimension(result, op1)) {
-            System.out.println("DotAdd Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
             return null;
         }
+        return matrixOp.dotadd(result, op1, op2);
+    }
 
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row, column);
-                float op2value = op2.get(row, column);
-                result.set(row, column, op1value + op2value);
-            }
+    public static imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2) {
+        if (!equalDimension(op1, op2) || !equalDimension(result, op1)) {
+            return null;
         }
-        return result;
+        return matrixOp.dotadd(result, factor1, op1, factor2, op2);
     }
 
     public static imatrix dotaddrow(int rrow, imatrix result, int row1, imatrix op1, int row2, imatrix op2) {
@@ -1009,34 +1005,18 @@ public strictfp class fmatrix implements imatrix {
 
     public static imatrix dotsubtract(imatrix op1, imatrix op2) {
         if (!equalDimension(op1, op2)) {
-            System.out.println("DotSubtract Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
             return null;
         }
-        fmatrix result = new fmatrix(op1.getNrOfRows(), op1.getNrOfColumns());
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row, column);
-                float op2value = op2.get(row, column);
-                result.set(row, column, op1value - op2value);
-            }
-        }
-        return result;
+        fmatrix result = new fmatrix(op1.getNrOfRows(), op1.getNrOfColumns(), op1.getNrOfSlices());
+        return dotsubtract(result, op1, op2);
     }
 
     public static imatrix dotsubtract(imatrix result, imatrix op1, imatrix op2) {
         if (!equalDimension(op1, op2) || !equalDimension(result, op1)) {
-            System.out.println("DotSubtract Error , matrix dimension are not the same " + op1.getSizeAsString() + " != " + op2.getSizeAsString());
             return null;
+        } else {
+            return matrixOp.dotsubtract(result, op1, op2);
         }
-
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row, column);
-                float op2value = op2.get(row, column);
-                result.set(row, column, op1value - op2value);
-            }
-        }
-        return result;
     }
 
     public static imatrix dotsubtract(imatrix op1, float op2) {
@@ -1101,7 +1081,7 @@ public strictfp class fmatrix implements imatrix {
 
     public static void copyInto(imatrix toCopy, imatrix dest) {
         if (toCopy.isTransposed() == dest.isTransposed()
-                && equalDimension(toCopy, dest) && toCopy.getZeroPadding() == dest.getZeroPadding()) {
+                && equalDimension(toCopy, dest)) {
             FloatBuffer srcData = toCopy.getHostData();
             FloatBuffer destData = dest.getHostData();
             srcData.rewind();
@@ -1109,22 +1089,19 @@ public strictfp class fmatrix implements imatrix {
             destData.put(srcData);
 
         } else {
-            int zpSrc = toCopy.getZeroPadding();
-            int zpDest = dest.getZeroPadding();
+            int eSrcRows = toCopy.getNrOfRows();
+            int eDstRows = dest.getNrOfRows();
 
-            int eSrcRows = toCopy.getNrOfRows() - 2 * zpSrc;
-            int eDstRows = dest.getNrOfRows() - 2 * zpSrc;
-
-            int eSrcCols = toCopy.getNrOfColumns() - 2 * zpDest;
-            int eDstCols = dest.getNrOfColumns() - 2 * zpDest;
+            int eSrcCols = toCopy.getNrOfColumns();
+            int eDstCols = dest.getNrOfColumns();
 
             int maxRow = eSrcRows < eDstRows ? eSrcRows : eDstRows;
             int maxCol = eSrcCols < eDstCols ? eSrcCols : eDstCols;
             for (int row = 0; row < maxRow; ++row) {
                 for (int column = 0; column < maxCol; ++column) {
                     dest.set(
-                            row + zpDest, column + zpDest,
-                            toCopy.get(row + zpSrc, column + zpSrc)
+                            row, column,
+                            toCopy.get(row, column)
                     );
                 }
             }
@@ -1139,22 +1116,20 @@ public strictfp class fmatrix implements imatrix {
      * @param dest the destination matrix.
      */
     public static void rowVectorToMatrix(imatrix source, imatrix dest) {
-        int zp = dest.getZeroPadding();
-        int eDstRows = dest.getNrOfRows() - zp * 2;
-        int eDstCols = dest.getNrOfColumns() - zp * 2;
+
+        int eDstRows = dest.getNrOfRows();
+        int eDstCols = dest.getNrOfColumns();
         int sliceSize = eDstRows * eDstCols;
 
-        int zpSrc = source.getZeroPadding();
-        int eSrcCols = source.getNrOfColumns() - zp;
+        int eSrcCols = source.getNrOfColumns();
 
-        for (int i = zpSrc; i < eSrcCols; ++i) {
-            float tc = source.get(zpSrc, i);
-            int ei = i - zpSrc;
-            int slice = ei / sliceSize;
-            int sliceIndex = ei % sliceSize;
+        for (int i = 0; i < eSrcCols; ++i) {
+            float tc = source.get(0, i);
+            int slice = i / sliceSize;
+            int sliceIndex = i % sliceSize;
             int row = sliceIndex % eDstCols;
             int col = sliceIndex / eDstCols;
-            dest.set(row + zp, col + zp, slice, tc);
+            dest.set(row, col, slice, tc);
         }
     }
 
@@ -1166,29 +1141,15 @@ public strictfp class fmatrix implements imatrix {
      * @param dest the destination of the
      */
     public static void matrixToRowVector(imatrix source, imatrix dest) {
-        if (source.getZeroPadding() == 0 && dest.getZeroPadding() == 0) {
-            FloatBuffer src = source.getHostData();
-            FloatBuffer dst = dest.getHostData();
-            int copies = Math.min(source.getSize(), dest.getNrOfColumns());
-            dst.rewind();
-            dst.put(src.array(), 0, copies);
-        } else {
-            int zpSrc = source.getZeroPadding();
-            int eRows = source.getNrOfRows() - zpSrc * 2;
-            int eCols = source.getNrOfColumns() - zpSrc * 2;
-            int sliceSize = eRows * eCols;
-
-            int zpDest = dest.getZeroPadding();
-
-            for (int i = zpDest; i < dest.getNrOfColumns() - zpDest; ++i) {
-                int slice = (i - zpDest) / sliceSize;
-                int sliceIndex = (i - zpDest) % sliceSize;
-                int row = sliceIndex % eCols;
-                int col = sliceIndex / eCols;
-                float tc = source.get(row + zpDest, col + zpDest, slice);
-                dest.set(zpDest, i, tc);
-            }
+        if (dest.getNrOfRows() > 1) {
+            Logger.getLogger(fmatrix.class
+                    .getName()).log(Level.INFO, "matrixToRowVector: Destination matrix has more than one row.");
         }
+        FloatBuffer src = source.getHostData();
+        FloatBuffer dst = dest.getHostData();
+        int copies = Math.min(source.getSize(), dest.getNrOfColumns());
+        dst.rewind();
+        dst.put(src.array(), 0, copies);
     }
 
     public static String print(imatrix m) {
@@ -1238,7 +1199,9 @@ public strictfp class fmatrix implements imatrix {
      * @return true if the dimensions are equal, false otherwise.
      */
     public static boolean equalDimension(imatrix op1, imatrix op2) {
-        return op1.getNrOfRows() == op2.getNrOfRows() && op1.getNrOfColumns() == op2.getNrOfColumns();
+        return op1.getNrOfRows() == op2.getNrOfRows()
+                && op1.getNrOfColumns() == op2.getNrOfColumns()
+                && op1.getNrOfSlices() == op2.getNrOfSlices();
     }
 
     private static Range parseRange(String range) {
@@ -1279,70 +1242,13 @@ public strictfp class fmatrix implements imatrix {
         return fmatrix.print(this);
     }
 
-    public void randomize(int i, int i0) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public void randomize(float min, float max) {
+        Random r = new Random();
+        this.applyFunction(x -> (r.nextFloat() * (max - min)) + min);
     }
 
     @Override
-    public cl_mem getCLReadMem() {
-        if (rMem == null) {
-            System.out.println("creating new mem r buffer");
-            rMem = FMatrixOpGpu.createReadMem(this, padding[0], padding[1]);
-        }
-        return rMem;
-    }
-
-    @Override
-    public cl_mem getCLReadWriteMem() {
-        if (rwMem == null) {
-            System.out.println("creating new mem rw buffer");
-            rwMem = FMatrixOpGpu.createReadWriteMem(this, padding[0], padding[1]);
-        }
-        return rwMem;
-    }
-
-    @Override
-    public Pointer getCLPointer() {
-        return Pointer.to(data.array());
-    }
-
-    /**
-     * Get the padding for the columns.
-     *
-     * @return the padding for the columns.
-     */
-    @Override
-    public int getColPadding() {
-        return padding[0];
-    }
-
-    /**
-     * Get the padding for the rows.
-     *
-     * @return the padding for the rows.
-     */
-    @Override
-    public int getRowPadding() {
-        return padding[1];
-    }
-
-    /**
-     * Get the number of columns on the device.
-     *
-     * @return the number of columns on the gpu device.
-     */
-    @Override
-    public int getDeviceColumns() {
-        return columns + getColPadding();
-    }
-
-    /**
-     * Get the number of rows on the device.
-     *
-     * @return the number of rows on the gpu device.
-     */
-    @Override
-    public int getDeviceRows() {
-        return rows + getRowPadding();
+    public DeviceBuffer getDeviceBuffer() {
+        return deviceBuffer;
     }
 }

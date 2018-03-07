@@ -1,133 +1,28 @@
 package dae.matrix.gpu;
 
 import dae.matrix.imatrix;
+import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import org.jocl.CL;
-import static org.jocl.CL.CL_CONTEXT_PLATFORM;
-import static org.jocl.CL.CL_DEVICE_MAX_WORK_ITEM_SIZES;
-import static org.jocl.CL.CL_DEVICE_NAME;
-import static org.jocl.CL.CL_DEVICE_TYPE_ALL;
 import static org.jocl.CL.CL_MEM_READ_ONLY;
 import static org.jocl.CL.CL_MEM_READ_WRITE;
 import static org.jocl.CL.CL_TRUE;
 import static org.jocl.CL.clCreateBuffer;
-import static org.jocl.CL.clCreateCommandQueue;
-import static org.jocl.CL.clCreateContext;
 import static org.jocl.CL.clEnqueueReadBuffer;
 import static org.jocl.CL.clEnqueueWriteBuffer;
-import static org.jocl.CL.clGetDeviceIDs;
-import static org.jocl.CL.clGetDeviceInfo;
-import static org.jocl.CL.clGetPlatformIDs;
 import static org.jocl.CL.clReleaseCommandQueue;
 import static org.jocl.CL.clReleaseContext;
-import org.jocl.Pointer;
 import org.jocl.Sizeof;
 import static org.jocl.blast.CLBlast.CLBlastSgemm;
 import static org.jocl.blast.CLBlastLayout.CLBlastLayoutColMajor;
 import static org.jocl.blast.CLBlastTranspose.*;
-import org.jocl.cl_command_queue;
-import org.jocl.cl_context;
-import org.jocl.cl_context_properties;
-import org.jocl.cl_device_id;
 import org.jocl.cl_event;
 import org.jocl.cl_mem;
-import org.jocl.cl_platform_id;
 
 /**
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public class FMatrixOpGpu implements FMatrixOp {
-
-    private static final cl_context context;
-    private static final cl_command_queue commandQueue;
-
-    private static final ConvolvKernel convolvKernel;
-    private static final ActivationKernel activationKernel;
-    private static long maxWorkItemSizes[];
-
-    static {
-        // The platform, device type and device number
-        // that will be used
-        final int platformIndex = 0;
-        final long deviceType = CL_DEVICE_TYPE_ALL;
-        final int deviceIndex = 0;
-
-        // Enable exceptions and subsequently omit error checks in this sample
-        CL.setExceptionsEnabled(true);
-
-        // Obtain the number of platforms
-        int numPlatformsArray[] = new int[1];
-        clGetPlatformIDs(0, null, numPlatformsArray);
-        int numPlatforms = numPlatformsArray[0];
-
-        // Obtain a platform ID
-        cl_platform_id platforms[] = new cl_platform_id[numPlatforms];
-        clGetPlatformIDs(platforms.length, platforms, null);
-        cl_platform_id platform = platforms[platformIndex];
-
-        // Initialize the context properties
-        cl_context_properties contextProperties = new cl_context_properties();
-        contextProperties.addProperty(CL_CONTEXT_PLATFORM, platform);
-
-        // Obtain the number of devices for the platform
-        int numDevicesArray[] = new int[1];
-        clGetDeviceIDs(platform, deviceType, 0, null, numDevicesArray);
-        int numDevices = numDevicesArray[0];
-
-        // Obtain a device ID
-        cl_device_id devices[] = new cl_device_id[numDevices];
-        clGetDeviceIDs(platform, deviceType, numDevices, devices, null);
-        cl_device_id device = devices[deviceIndex];
-
-        // Create a context for the selected device
-        context = clCreateContext(contextProperties, 1,
-                new cl_device_id[]{device}, null, null, null);
-
-        String deviceName = getString(device, CL_DEVICE_NAME);
-
-        System.out.printf("CL_DEVICE_NAME: %s\n", deviceName);
-
-        // Create a command-queue
-        commandQueue = clCreateCommandQueue(context, device, 0, null);
-
-        convolvKernel = new ConvolvKernel("/kernels/convolve.kernel");
-        convolvKernel.init(context, commandQueue);
-
-        activationKernel = new ActivationKernel();
-        activationKernel.init(context, commandQueue);
-
-        // CL_DEVICE_MAX_WORK_ITEM_SIZES
-        maxWorkItemSizes = getSizes(device, CL_DEVICE_MAX_WORK_ITEM_SIZES, 3);
-
-    }
-
-    private static int getInt(cl_device_id device, int paramName) {
-        long size[] = new long[1];
-        clGetDeviceInfo(device, paramName, 0, null, size);
-
-        byte buffer[] = new byte[(int) size[0]];
-        clGetDeviceInfo(device, paramName, buffer.length, Pointer.to(buffer),
-                null);
-
-        return buffer[0];
-    }
-
-    private static String getString(cl_device_id device, int paramName) {
-        // Obtain the length of the string that will be queried
-        long size[] = new long[1];
-        clGetDeviceInfo(device, paramName, 0, null, size);
-
-        // Create a buffer of the appropriate size and fill it with the info
-        byte buffer[] = new byte[(int) size[0]];
-        clGetDeviceInfo(device, paramName, buffer.length, Pointer.to(buffer),
-                null);
-
-        // Create a string from the buffer (excluding the trailing \0 byte)
-        return new String(buffer, 0, buffer.length - 1);
-    }
 
     /**
      * Calculates the following product : alpha A * B + beta * C, where A*B is a
@@ -146,17 +41,20 @@ public class FMatrixOpGpu implements FMatrixOp {
         int K = B.getNrOfRows();
         int N = C.getNrOfColumns();
 
-        cl_mem memA = A.getCLReadMem();
-        cl_mem memB = B.getCLReadMem();
-        cl_mem memC = C.getCLReadWriteMem();
+        DeviceBuffer ADB = A.getDeviceBuffer();
+        DeviceBuffer BDB = B.getDeviceBuffer();
+        DeviceBuffer CDB = C.getDeviceBuffer();
+        cl_mem memA = ADB.getCLReadMem();
+        cl_mem memB = BDB.getCLReadMem();
+        cl_mem memC = CDB.getCLReadWriteMem();
 
         // Copy the host data to the device
-        clEnqueueWriteBuffer(commandQueue, memA, CL_TRUE, 0, M * K
-                * Sizeof.cl_float, A.getCLPointer(), 0, null, null);
-        clEnqueueWriteBuffer(commandQueue, memB, CL_TRUE, 0, K * N
-                * Sizeof.cl_float, B.getCLPointer(), 0, null, null);
-        clEnqueueWriteBuffer(commandQueue, memC, CL_TRUE, 0, M * N
-                * Sizeof.cl_float, C.getCLPointer(), 0, null, null);
+        clEnqueueWriteBuffer(GPU.CL_COMMAND_QUEUE, memA, CL_TRUE, 0, M * K
+                * Sizeof.cl_float, ADB.getCLPointer(), 0, null, null);
+        clEnqueueWriteBuffer(GPU.CL_COMMAND_QUEUE, memB, CL_TRUE, 0, K * N
+                * Sizeof.cl_float, BDB.getCLPointer(), 0, null, null);
+        clEnqueueWriteBuffer(GPU.CL_COMMAND_QUEUE, memC, CL_TRUE, 0, M * N
+                * Sizeof.cl_float, CDB.getCLPointer(), 0, null, null);
 
         int lda = A.getNrOfRows();
         if (A.isTransposed()) {
@@ -179,10 +77,10 @@ public class FMatrixOpGpu implements FMatrixOp {
                 memB, 0, ldb,
                 beta,
                 memC, 0, M,
-                commandQueue, event);
+                GPU.CL_COMMAND_QUEUE, event);
 
-        clEnqueueReadBuffer(commandQueue, memC, CL_TRUE, 0, M * N
-                * Sizeof.cl_float, C.getCLPointer(), 0, null, null);
+        clEnqueueReadBuffer(GPU.CL_COMMAND_QUEUE, memC, CL_TRUE, 0, M * N
+                * Sizeof.cl_float, CDB.getCLPointer(), 0, null, null);
     }
 
     /**
@@ -195,7 +93,7 @@ public class FMatrixOpGpu implements FMatrixOp {
      */
     @Override
     public void convolve(imatrix input, imatrix filter, int stride, imatrix output) {
-        convolvKernel.convolv(input, filter, output);
+        GPU.KERNEL_CONVOLV.convolv(input, filter, output);
     }
 
     /**
@@ -209,7 +107,7 @@ public class FMatrixOpGpu implements FMatrixOp {
      */
     @Override
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
-        convolvKernel.batchConvolv(input, filter, stride, output);
+        GPU.KERNEL_CONVOLV.batchConvolv(input, filter, stride, output);
     }
 
     /**
@@ -223,7 +121,20 @@ public class FMatrixOpGpu implements FMatrixOp {
      */
     @Override
     public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
-        convolvKernel.batchCorrelate(input, filter, stride, output);
+        GPU.KERNEL_CONVOLV.batchCorrelate(input, filter, stride, output);
+    }
+
+    /**
+     * Performs the back propagation correlation operation in batch.
+     *
+     * @param input The input matrix.
+     * @param filter The filter matrix.
+     * @param stride the stride
+     * @param output The output matrix.
+     */
+    @Override
+    public void batchBackpropCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        GPU.KERNEL_CONVOLV.batchBackpropCorrelate(input, filter, stride, output);
     }
 
     /**
@@ -234,7 +145,43 @@ public class FMatrixOpGpu implements FMatrixOp {
      */
     @Override
     public void sigmoid(imatrix O) {
-        activationKernel.sigmoid(O);
+        GPU.KERNEL_ACTIVATION.sigmoid(O);
+    }
+
+    /**
+     * Applies a max pool on the input matrix and stores it into the output
+     * matrix. It is assumed that the dimensions of the output matrix are
+     * dividers of the dimensions of the input matrix.
+     *
+     * The resulting maskLayer can be used to back propagate deltas to the
+     * previous layer. The maskLayer will be filled with zeros and the location
+     * of the maximum per filter will be set to 1.
+     *
+     * @param input the input matrix.
+     * @param output the output matrix.
+     * @param maskLayer a matrix with the same dimension as the input layer
+     * which can be used to determine which input pixels contributed to the
+     * output.
+     */
+    @Override
+    public void batchMaxPool(imatrix input, imatrix output, intmatrix maskLayer) {
+        GPU.KERNEL_POOL.maxPool(input, output, maskLayer);
+    }
+
+    /**
+     * Scales up the input matrix to the dimensions of the output matrix. Only
+     * the cells that are defined in the masking layer are applied to output.
+     *
+     * @param input the input matrix.
+     * @param maskLayer a matrix with the same dimension as the input layer
+     * which can be used to determine which input pixels contributed to the
+     * output.
+     * @param output the output matrix.
+     *
+     */
+    @Override
+    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
+        GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, output);
     }
 
     /**
@@ -245,53 +192,79 @@ public class FMatrixOpGpu implements FMatrixOp {
      */
     @Override
     public void dsigmoid(imatrix O) {
-        activationKernel.dsigmoid(O);
+        GPU.KERNEL_ACTIVATION.dsigmoid(O);
+    }
+
+    /**
+     * Calculates the element by element addition of op1 and op2.
+     *
+     * @param result the matrix to store the result.
+     * @param op1 the first operand.
+     * @param op2 the second operand.
+     * @return the result matrix
+     */
+    public imatrix dotadd(imatrix result, imatrix op1, imatrix op2) {
+        return GPU.KERNEL_MATRIX_OP.dotadd(result, op1, op2);
+    }
+
+    /**
+     * Calculates the element by element addition of factor1 * op1 and factor2 *
+     * op2.
+     *
+     * @param result the matrix to store the result.
+     * @param factor1 the first factor.
+     * @param op1 the first operand.
+     * @param factor2 the second factor.
+     * @param op2 the second operand.
+     * @return the result matrix
+     */
+    @Override
+    public imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2) {
+        return GPU.KERNEL_MATRIX_OP.dotadd(result, factor1, op1, factor2, op2);
+    }
+
+    /**
+     * Calculates the element by element subtraction of op1 and op2.
+     *
+     * @param result the matrix to store the result.
+     * @param op1 the first operand.
+     * @param op2 the second operand.
+     * @return the result matrix
+     */
+    @Override
+    public imatrix dotsubtract(imatrix result, imatrix op1, imatrix op2) {
+        return GPU.KERNEL_MATRIX_OP.dotsubtract(result, op1, op2);
+    }
+
+    /**
+     * Calculates the element by element subtraction of op1 and op2.
+     *
+     * @param result the matrix to store the result.
+     * @param op1 the first operand.
+     * @param op2 the second operand.
+     * @return the result matrix
+     */
+    @Override
+    public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2) {
+        return GPU.KERNEL_MATRIX_OP.dotmultiply(result, op1, op2);
     }
 
     public static void cleanup() {
-        clReleaseCommandQueue(commandQueue);
-        clReleaseContext(context);
+        clReleaseCommandQueue(GPU.CL_COMMAND_QUEUE);
+        clReleaseContext(GPU.CL_CONTEXT);
     }
 
     public static cl_mem createReadMem(imatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(context, CL_MEM_READ_ONLY,
+        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_ONLY,
                 (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
                 * Sizeof.cl_float, null, null);
         return mem;
     }
 
     public static cl_mem createReadWriteMem(imatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(context, CL_MEM_READ_WRITE,
+        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_WRITE,
                 (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
                 * Sizeof.cl_float, null, null);
         return mem;
-    }
-
-    /**
-     * Returns the values of the device info parameter with the given name
-     *
-     * @param device The device
-     * @param paramName The parameter name
-     * @param numValues The number of values
-     * @return The value
-     */
-    private static long[] getSizes(cl_device_id device, int paramName, int numValues) {
-        // The size of the returned data has to depend on 
-        // the size of a size_t, which is handled here
-        ByteBuffer buffer = ByteBuffer.allocate(
-                numValues * Sizeof.size_t).order(ByteOrder.nativeOrder());
-        clGetDeviceInfo(device, paramName, Sizeof.size_t * numValues,
-                Pointer.to(buffer), null);
-        long values[] = new long[numValues];
-        if (Sizeof.size_t == 4) {
-            for (int i = 0; i < numValues; i++) {
-                values[i] = buffer.getInt(i * Sizeof.size_t);
-            }
-        } else {
-            for (int i = 0; i < numValues; i++) {
-                values[i] = buffer.getLong(i * Sizeof.size_t);
-            }
-        }
-        return values;
     }
 }

@@ -57,8 +57,6 @@ public class TranslateLayer extends AbstractLayer {
     @Override
     public void calculateNewWeights(float learningRate) {
         fmatrix.sumPerColumn(errors, deltaWeights);
-        deltaWeights.multiply(learningRate / getBatchSize());
-        fmatrix.dotsubtract(newWeights, weights, deltaWeights);
     }
 
     @Override
@@ -67,7 +65,7 @@ public class TranslateLayer extends AbstractLayer {
     }
 
     @Override
-    public void adaptWeights() {
+    public void adaptWeights(float factor) {
         fmatrix.copyInto(newWeights, weights);
     }
 
@@ -80,11 +78,15 @@ public class TranslateLayer extends AbstractLayer {
      */
     @Override
     public void randomizeWeights(Random r, float min, float max) {
-        weights.applyFunction(x -> min + r.nextFloat()*(max-min));
+        weights.applyFunction(x -> min + r.nextFloat() * (max - min));
     }
 
     @Override
     public void writeWeightImage(String file) {
         // todo implement.
+    }
+
+    @Override
+    public void writeOutputImage(String file) {
     }
 }

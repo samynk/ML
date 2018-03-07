@@ -1,5 +1,6 @@
 package dae.matrix;
 
+import dae.matrix.gpu.DeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
 import org.jocl.Pointer;
@@ -17,6 +18,16 @@ public class tmatrix implements imatrix {
 
     public tmatrix(imatrix source) {
         this.source = source;
+    }
+    
+    /**
+     * Checks if this matrix is a row vector.
+     *
+     * @return true if the matrix is a row vector, false otherwise.
+     */
+    @Override
+    public boolean isRowVector() {
+        return source.getNrOfColumns() == 1 && getNrOfSlices() == 1;
     }
 
     public void setSource(imatrix source) {
@@ -136,6 +147,15 @@ public class tmatrix implements imatrix {
     public FloatBuffer getHostData() {
         return source.getHostData();
     }
+    
+    /**
+     * Returns the DeviceBuffer object.
+     * @return the DeviceBuffer object.
+     */
+    public DeviceBuffer getDeviceBuffer(){
+        return source.getDeviceBuffer();
+    }
+    
 
     /**
      * Checks if this is a transposed view on the source data.
@@ -143,21 +163,6 @@ public class tmatrix implements imatrix {
     @Override
     public boolean isTransposed() {
         return !source.isTransposed();
-    }
-
-    @Override
-    public cl_mem getCLReadMem() {
-        return source.getCLReadMem();
-    }
-
-    @Override
-    public cl_mem getCLReadWriteMem() {
-        return source.getCLReadWriteMem();
-    }
-
-    @Override
-    public Pointer getCLPointer() {
-        return source.getCLPointer();
     }
 
     @Override
@@ -185,34 +190,5 @@ public class tmatrix implements imatrix {
         return new tmatrix(source.copy());
     }
 
-    @Override
-    public int getColPadding() {
-        return source.getColPadding();
-    }
-
-    @Override
-    public int getRowPadding() {
-        return source.getRowPadding();
-    }
-
-    /**
-     * Get the number of columns on the device.
-     *
-     * @return the number of columns on the gpu device.
-     */
-    @Override
-    public int getDeviceColumns() {
-        return source.getDeviceColumns();
-    }
-
-    /**
-     * Get the number of rows on the device.
-     *
-     * @return the number of rows on the gpu device.
-     */
-    @Override
-    public int getDeviceRows() {
-        return source.getDeviceRows();
-    }
-
+    
 }

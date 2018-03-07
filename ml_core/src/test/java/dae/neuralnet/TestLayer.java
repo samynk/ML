@@ -4,6 +4,8 @@ import dae.matrix.Cell;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.neuralnet.activation.ActivationFunction;
+import dae.neuralnet.cost.CostFunction;
+import dae.neuralnet.cost.QuadraticCostFunction;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
 import dae.neuralnet.matrix.MatrixFactory;
@@ -78,7 +80,9 @@ public class TestLayer {
         assertEquals(0.75136507f, output2.get(0, 0), 0.0010f);
         assertEquals(0.772928465f, output2.get(0, 1), 0.0010f);
 
-        l2.backpropagate(0.5f, true);
+        CostFunction cf = new QuadraticCostFunction();
+        cf.calculateDerivedCost(l2.getErrors(), output2, l2.getIdeal());
+        l2.backpropagate(0.5f);
 
         fmatrix errors = l2.getErrors();
         fmatrix E = new fmatrix(errors);
@@ -112,10 +116,10 @@ public class TestLayer {
         System.out.println("__________________________");
         System.out.println(deltas);
         // finally 
-        l2.adaptWeights();
+        l2.adaptWeights(1);
 
-        l1.backpropagate(0.5f, false);
-        l1.adaptWeights();
+        l1.backpropagate(0.5f);
+        l1.adaptWeights(1);
 
         System.out.println(l1.getWeights());
 
@@ -127,7 +131,7 @@ public class TestLayer {
         target.setRow(0, new float[]{0.01f, 0.99f});
 
         for (int i = 0; i < 1000; ++i) {
-            dl.train(i, input, target);
+            dl.train(i, input, target, TrainingMode.STOCHASTIC);
         }
     }
 
@@ -148,6 +152,7 @@ public class TestLayer {
 
         Random r = new Random();
 
+        CostFunction cf = new QuadraticCostFunction();
         for (int i = 0; i < 100000; ++i) {
             int nextImage = r.nextInt(maxImage);
             images.getRow(nextImage + 1, image);
@@ -160,8 +165,10 @@ public class TestLayer {
             l1.setInputs(image);
             l1.setIdeal(target);
             l1.forward();
-            l1.backpropagate(.1f, true);
-            l1.adaptWeights();
+
+            cf.calculateDerivedCost(l1.getErrors(), l1.getOutputs(), l1.getIdeal());
+            l1.backpropagate(.1f);
+            l1.adaptWeights(1);
         }
 
         testDigitRecognitionSingleLayer(l1, r);
@@ -237,7 +244,7 @@ public class TestLayer {
             target.reset();
             target.set(0, digit, 1);
 
-            dl.train(i, image, target);
+            dl.train(i, image, target, TrainingMode.STOCHASTIC);
         }
 
         testDigitRecognition(dl, r);
@@ -297,6 +304,7 @@ public class TestLayer {
         // bigger than 22 degrees is warm, smaller than 22 degrees is cold.
         float cutoff = 22;
 
+        CostFunction cf = new QuadraticCostFunction();
         for (int i = 0; i < ITERATIONS; ++i) {
             float T = generateRandom(r, cutoff);
 
@@ -310,8 +318,9 @@ public class TestLayer {
             l1.setInputs(input);
             l1.setIdeal(target);
             l1.forward();
-            l1.backpropagate(1f, true);
-            l1.adaptWeights();
+            cf.calculateDerivedCost(l1.getErrors(), l1.getOutputs(), target);
+            l1.backpropagate(1f);
+            l1.adaptWeights(1);
         }
 
         System.out.println("Single layer solution:");
@@ -368,7 +377,7 @@ public class TestLayer {
             } else {
                 target.set(0, 0, 0);
             }
-            dl.train(i, input, target);
+            dl.train(i, input, target, TrainingMode.STOCHASTIC);
         }
 
         System.out.println("With constraint");
@@ -434,7 +443,7 @@ public class TestLayer {
             } else {
                 target.set(0, 0, 0);
             }
-            dl.train(i, input, target);
+            dl.train(i, input, target, TrainingMode.STOCHASTIC);
         }
 
         System.out.println("Without constraint");
@@ -488,7 +497,7 @@ public class TestLayer {
             target.set(0, 0, T > cutoff1 ? 1 : 0);
             target.set(0, 1, H > cutoff2 ? 1 : 0);
 
-            dl.train(i, input, target);
+            dl.train(i, input, target, TrainingMode.STOCHASTIC);
         }
 
         int success = 0;

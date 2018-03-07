@@ -2,6 +2,8 @@ package dae.neuralnet;
 
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
+import dae.neuralnet.cost.CostFunction;
+import dae.neuralnet.cost.QuadraticCostFunction;
 import java.util.Calendar;
 import java.util.Random;
 
@@ -14,6 +16,7 @@ public class DeepLayer {
     private final ILayer[] layers;
     private boolean validNetwork;
     private final LearningRate learningRate;
+    private CostFunction costFunction = new QuadraticCostFunction();
 
     /**
      * Creates a new deep layer neural network with the given inputs and outputs
@@ -35,7 +38,17 @@ public class DeepLayer {
                         + "Outputs of layer " + i + " do not match inputs of the next layer.");
             }
         }
+    }
 
+    /**
+     * Sets the cost function of this layer. This cost function will also
+     * calculate the initial deltas that will be used for back propagation. The
+     * cost function should only be used on the final layer.
+     *
+     * @param function the function to set as cost function.
+     */
+    public void setCostFunction(CostFunction function) {
+        this.costFunction = function;
     }
 
     /**
@@ -96,16 +109,19 @@ public class DeepLayer {
      * @param iteration the current iteration in the training phase.
      * @param input the training input.
      * @param target the target output.
+     * @param mode
      */
-    public void train(int iteration, imatrix input, imatrix target) {
+    public void train(int iteration, imatrix input, imatrix target, TrainingMode mode) {
         setTarget(target);
         forward(input);
         float lr = this.learningRate.getLearningRate(iteration);
 
+        ILayer last = getLastLayer();
+        this.costFunction.calculateDerivedCost(last.getErrors(), last.getOutputs(), target);
         for (int i = layers.length; i > 0; --i) {
             ILayer current = layers[i - 1];
             // only calculate deltas for last layer.
-            current.backpropagate(lr, i == layers.length);
+            current.backpropagate(lr);
 
             if ((i - 2) >= 0) {
                 ILayer previous = layers[i - 2];
@@ -113,8 +129,17 @@ public class DeepLayer {
             }
         }
 
+        if (mode == TrainingMode.STOCHASTIC) {
+            for (int i = 0; i < layers.length; ++i) {
+                layers[i].adaptWeights(1);
+            }
+        }
+    }
+
+    public void adaptWeights(int iteration, int batchSize) {
+        float lr = this.learningRate.getLearningRate(iteration);
         for (int i = 0; i < layers.length; ++i) {
-            layers[i].adaptWeights();
+            layers[i].adaptWeights(lr / batchSize);
         }
     }
 
@@ -122,7 +147,7 @@ public class DeepLayer {
         setInputs(input);
         for (int i = 0; i < layers.length; ++i) {
             layers[i].forward();
-
+            String layer = layers[i].getName();
             if (i + 1 < layers.length) {
                 fmatrix outputs = layers[i].getOutputs();
                 layers[i + 1].setInputs(outputs);
@@ -130,10 +155,7 @@ public class DeepLayer {
         }
     }
 
-    /**
-     * Writes a weight representation of every weight.
-     */
-    public void writeWeightImages() {
+    public void writeOutputImages() {
         int layerIndex = 1;
         Calendar c = Calendar.getInstance();
         int year = c.get(Calendar.YEAR);
@@ -142,7 +164,32 @@ public class DeepLayer {
         int hour = c.get(Calendar.HOUR_OF_DAY);
         int mins = c.get(Calendar.MINUTE);
         for (ILayer l : this.layers) {
-            l.writeWeightImage("weight_" + year + "_" + month + "_" + day + "#" + hour + "_" + mins + "_" + layerIndex);
+            l.writeOutputImage("output_" + year + "_" + month + "_" + day + "/" + hour + "_" + mins + "_" + layerIndex);
+            ++layerIndex;
+        }
+    }
+
+    public String getTrainingStartTimeAsFolder() {
+        Calendar c = Calendar.getInstance();
+        int year = c.get(Calendar.YEAR);
+        int month = c.get(Calendar.MONTH);
+        int day = c.get(Calendar.DAY_OF_MONTH);
+        int hour = c.get(Calendar.HOUR_OF_DAY);
+        int mins = c.get(Calendar.MINUTE);
+
+        return year + "_" + (month + 1) + "_" + day + "/" + hour + "_" + mins;
+    }
+
+    /**
+     * Writes a weight representation of every weight.
+     *
+     * @param folder the base folder for the images.
+     * @param iteration the training iteration to write.
+     */
+    public void writeWeightImages(String folder, int iteration) {
+        int layerIndex = 1;
+        for (ILayer l : this.layers) {
+            l.writeWeightImage(folder + "/" + iteration + "/" + layerIndex + "_" + l.getName());
             ++layerIndex;
         }
     }

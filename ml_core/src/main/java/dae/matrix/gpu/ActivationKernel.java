@@ -5,9 +5,7 @@
 package dae.matrix.gpu;
 
 import dae.matrix.imatrix;
-import static org.jocl.CL.CL_TRUE;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
-import static org.jocl.CL.clEnqueueReadBufferRect;
 import static org.jocl.CL.clSetKernelArg;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
@@ -43,18 +41,18 @@ public class ActivationKernel extends OpenCLKernel {
     }
 
     public void sigmoid(imatrix O) {
-        int[] oDim = new int[]{O.getDeviceColumns(), O.getDeviceRows()};
-        cl_mem memOutput = super.uploadRWMatrix(O);
+        int[] oDim = O.getDeviceBuffer().getDeviceDimension();
+        cl_mem memOutput = GPU.uploadRWMatrix(O);
 
         clSetKernelArg(sigmoid, 0, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(sigmoid, 1, Sizeof.cl_int2, Pointer.to(oDim));
 
-        long globalSize[] = new long[]{oDim[0], oDim[1]};
-        long localSize[] = new long[]{32, 32};
+        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
+        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 sigmoid,
-                2,
+                3,
                 null,
                 globalSize,
                 localSize,
@@ -62,12 +60,12 @@ public class ActivationKernel extends OpenCLKernel {
                 null,
                 null);
 
-        downloadRWMatrix(O);
+        GPU.downloadRWMatrix(O);
     }
 
     public void dsigmoid(imatrix O) {
-        int[] oDim = new int[]{O.getDeviceColumns(), O.getDeviceRows()};
-        cl_mem memOutput = super.uploadRWMatrix(O);
+        int[] oDim = O.getDeviceBuffer().getDeviceDimension();
+        cl_mem memOutput = GPU.uploadRWMatrix(O);
 
         clSetKernelArg(dsigmoid, 0, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(dsigmoid, 1, Sizeof.cl_int2, Pointer.to(oDim));
@@ -86,6 +84,6 @@ public class ActivationKernel extends OpenCLKernel {
                 null,
                 null);
 
-        downloadRWMatrix(O);
+        GPU.downloadRWMatrix(O);
     }
 }

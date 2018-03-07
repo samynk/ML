@@ -42,7 +42,7 @@ public class BinImageReader {
                 dis.read(pixelBlock);
                 for (int pixel = 0; pixel < imageSize; ++pixel) {
                     int cp = pixelBlock[pixel]&0xff; // &0xff;
-                    float pixelValue = (float) (cp / 255.0f);
+                    float pixelValue = (float) ( cp / 255.0f)  ; // / 255.0f);
                     result.set(i, pixel, pixelValue);
                     /*float test = m_Result->get_value(i,pixel);
                         if ( test != pixelValue )

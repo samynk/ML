@@ -21,9 +21,17 @@ public enum ActivationFunction {
             x -> (float) (1 / (1 + Math.exp(-x))),
             x -> x * (1 - x)
     ),
+    CESIGMOID(
+            x -> (float) (1 / (1 + Math.exp(-x))),
+            x -> 1
+    ),
     LEAKYRELU(
-            x -> (x < 0) ? 0.01f * x : 0.1f * x,
-            x -> (x < 0) ? 0.01f : .1f
+            x -> (x < 0) ? 0.001f * x :  x,
+            x -> (x < 0) ? 0.001f : 1
+    ),
+    RELU(
+            x -> (x < 0) ? 0 : x,
+            x -> (x < 0) ? 0 : 1
     );
 
     private final Function a;

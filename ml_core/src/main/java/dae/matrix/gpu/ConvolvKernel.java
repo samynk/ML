@@ -8,7 +8,6 @@ import dae.matrix.imatrix;
 import static org.jocl.CL.CL_TRUE;
 import static org.jocl.CL.clEnqueueFillBuffer;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
-import static org.jocl.CL.clEnqueueReadBufferRect;
 import static org.jocl.CL.clEnqueueWriteBuffer;
 import static org.jocl.CL.clSetKernelArg;
 import org.jocl.Pointer;
@@ -27,6 +26,7 @@ public class ConvolvKernel extends OpenCLKernel {
     private cl_kernel convolution;
     private cl_kernel batchConvolution;
     private cl_kernel batchCorrelation;
+    private cl_kernel batchBackpropCorrelation;
 
     /**
      * Creates a new convolution kernel.
@@ -49,6 +49,7 @@ public class ConvolvKernel extends OpenCLKernel {
         convolution = this.createKernel("convolution");
         batchConvolution = this.createKernel("batchConvolution");
         batchCorrelation = this.createKernel("batchCorrelate");
+        batchBackpropCorrelation = this.createKernel("batchBackpropCorrelate");
         super.releaseProgram();
     }
 
@@ -56,19 +57,20 @@ public class ConvolvKernel extends OpenCLKernel {
         int[] iDim = new int[]{input.getNrOfColumns(), input.getNrOfRows()};
         int[] fDim = new int[]{filter.getNrOfColumns(), filter.getNrOfRows()};
 
-        cl_mem memInput = input.getCLReadMem();
-        cl_mem memFilter = filter.getCLReadMem();
+        DeviceBuffer inputDB = input.getDeviceBuffer();
+        cl_mem memInput = inputDB.getCLReadMem();
+
+        DeviceBuffer filterDB = filter.getDeviceBuffer();
+        cl_mem memFilter = filterDB.getCLReadMem();
 
         clEnqueueWriteBuffer(commandQueue, memInput, CL_TRUE, 0, input.getSliceSize()
-                * Sizeof.cl_float, input.getCLPointer(), 0, null, null);
+                * Sizeof.cl_float, inputDB.getCLPointer(), 0, null, null);
         clEnqueueWriteBuffer(commandQueue, memFilter, CL_TRUE, 0, filter.getSliceSize()
-                * Sizeof.cl_float, filter.getCLPointer(), 0, null, null);
+                * Sizeof.cl_float, filterDB.getCLPointer(), 0, null, null);
 
-        int hostCols = output.getNrOfColumns() + output.getColPadding();
-        int hostRows = output.getNrOfRows() + output.getRowPadding();
-
-        int[] oDim = new int[]{hostCols, hostRows};
-        cl_mem memOutput = output.getCLReadWriteMem();
+        DeviceBuffer outputDB = output.getDeviceBuffer();
+        int[] oDim = outputDB.getDeviceDimension();
+        cl_mem memOutput = outputDB.getCLReadWriteMem();
 
         clSetKernelArg(convolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(convolution, 1, Sizeof.cl_mem, Pointer.to(memFilter));
@@ -78,8 +80,8 @@ public class ConvolvKernel extends OpenCLKernel {
         clSetKernelArg(convolution, 5, Sizeof.cl_int2, Pointer.to(oDim));
 
         long globalSize[] = new long[2];
-        globalSize[0] = hostCols;
-        globalSize[1] = hostRows;
+        globalSize[0] = oDim[0];
+        globalSize[1] = oDim[1];
 
         long localSize[] = new long[]{32, 32};
         clEnqueueNDRangeKernel(
@@ -94,48 +96,40 @@ public class ConvolvKernel extends OpenCLKernel {
                 null);
         long end = System.nanoTime();
 
-        long region[] = new long[]{output.getNrOfColumns() * Float.BYTES, output.getNrOfRows(), 1};
-        clEnqueueReadBufferRect(commandQueue, memOutput, CL_TRUE,
-                new long[]{0, 0, 0},
-                new long[]{0, 0, 0},
-                region,
-                // device
-                hostCols * Float.BYTES, 0,
-                // host
-                output.getNrOfColumns() * Float.BYTES, 0,
-                output.getCLPointer(),
-                0,
-                null,
-                null);
+        GPU.downloadRWMatrix(output);
     }
 
-    public void batchConvolv(imatrix input, imatrix filter, imatrix output) {
-        int[] iDim = new int[]{input.getNrOfColumns(), input.getNrOfRows()};
+    public void batchConvolv(imatrix input, imatrix filter, int stride, imatrix output) {
+        DeviceBuffer inputDB = input.getDeviceBuffer();
+        int[] iDim = inputDB.getDeviceDimension();
         int[] fDim = new int[]{filter.getNrOfColumns(), filter.getNrOfRows()};
+        int[] ps = new int[]{stride};
+        int[] fps = new int[]{filter.getNrOfSlices() / input.getNrOfSlices()};
 
-        cl_mem memInput = input.getCLReadMem();
-        cl_mem memFilter = filter.getCLReadMem();
+        GPU.zeroFillR(input);
+        GPU.uploadRMatrix(input);
 
-        clEnqueueWriteBuffer(commandQueue, memInput, CL_TRUE, 0, input.getSliceSize()
-                * Sizeof.cl_float, input.getCLPointer(), 0, null, null);
+        DeviceBuffer filterDB = filter.getDeviceBuffer();
+
+        cl_mem memFilter = filterDB.getCLReadMem();
         clEnqueueWriteBuffer(commandQueue, memFilter, CL_TRUE, 0, filter.getSize()
-                * Sizeof.cl_float, filter.getCLPointer(), 0, null, null);
+                * Sizeof.cl_float, filterDB.getCLPointer(), 0, null, null);
 
-        int deviceCols = output.getDeviceColumns();
-        int deviceRows = output.getDeviceRows();
+        DeviceBuffer outputDB = output.getDeviceBuffer();
+        int deviceCols = outputDB.getDeviceColumns();
+        int deviceRows = outputDB.getDeviceRows();
+        int[] oDim = outputDB.getDeviceDimension();
+        cl_mem memOutput = outputDB.getCLReadWriteMem();
+        GPU.zeroFillRW(output);
 
-        int[] oDim = new int[]{deviceCols, deviceRows};
-        cl_mem memOutput = output.getCLReadWriteMem();
-
-        float zero[] = new float[1];
-        clEnqueueFillBuffer(commandQueue, memOutput, Pointer.to(zero), Float.BYTES, 0, deviceCols * deviceRows * Float.BYTES, 0, null, null);
-
-        clSetKernelArg(batchConvolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(batchConvolution, 0, Sizeof.cl_mem, Pointer.to(inputDB.getCLReadMem()));
         clSetKernelArg(batchConvolution, 1, Sizeof.cl_mem, Pointer.to(memFilter));
         clSetKernelArg(batchConvolution, 2, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(batchConvolution, 3, Sizeof.cl_int2, Pointer.to(iDim));
         clSetKernelArg(batchConvolution, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        clSetKernelArg(batchConvolution, 5, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(batchConvolution, 5, Sizeof.cl_int, Pointer.to(fps));
+        clSetKernelArg(batchConvolution, 6, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(batchConvolution, 7, Sizeof.cl_int, Pointer.to(ps));
 
         long globalSize[] = new long[3];
         globalSize[0] = deviceCols;
@@ -154,88 +148,47 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        downloadRWMatrix(output);
+        GPU.downloadRWMatrix(output);
     }
 
-    public void batchConvolv(imatrix input, imatrix filter, int stride, imatrix output) {
-        int[] iDim = new int[]{input.getNrOfColumns(), input.getNrOfRows()};
-        int[] fDim = new int[]{filter.getNrOfColumns(), filter.getNrOfRows()};
-        int[] ps = new int[]{stride};
-
-        cl_mem memInput = input.getCLReadMem();
-        cl_mem memFilter = filter.getCLReadMem();
-
-        clEnqueueWriteBuffer(commandQueue, memInput, CL_TRUE, 0, input.getSliceSize()
-                * Sizeof.cl_float, input.getCLPointer(), 0, null, null);
-        clEnqueueWriteBuffer(commandQueue, memFilter, CL_TRUE, 0, filter.getSize()
-                * Sizeof.cl_float, filter.getCLPointer(), 0, null, null);
-
-        int deviceCols = output.getDeviceColumns();
-        int deviceRows = output.getDeviceRows();
-
-        int[] oDim = new int[]{deviceCols, deviceRows};
-        cl_mem memOutput = output.getCLReadWriteMem();
-
-        float zero[] = new float[1];
-        clEnqueueFillBuffer(commandQueue, memOutput, Pointer.to(zero), Float.BYTES, 0, deviceCols * deviceRows * Float.BYTES, 0, null, null);
-
-        int result = clSetKernelArg(batchConvolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
-        result = clSetKernelArg(batchConvolution, 1, Sizeof.cl_mem, Pointer.to(memFilter));
-        result = clSetKernelArg(batchConvolution, 2, Sizeof.cl_mem, Pointer.to(memOutput));
-        result = clSetKernelArg(batchConvolution, 3, Sizeof.cl_int2, Pointer.to(iDim));
-        result = clSetKernelArg(batchConvolution, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        result = clSetKernelArg(batchConvolution, 5, Sizeof.cl_int2, Pointer.to(oDim));
-        result = clSetKernelArg(batchConvolution, 6, Sizeof.cl_int, Pointer.to(ps));
-
-        long globalSize[] = new long[3];
-        globalSize[0] = deviceCols;
-        globalSize[1] = deviceRows;
-        globalSize[2] = filter.getNrOfSlices();
-
-        long localSize[] = new long[]{32, 32, 1};
-        clEnqueueNDRangeKernel(
-                commandQueue,
-                batchConvolution,
-                3,
-                null,
-                globalSize,
-                localSize,
-                0,
-                null,
-                null);
-
-        downloadRWMatrix(output);
-    }
-    
     public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
-        int[] iDim = new int[]{input.getNrOfColumns(), input.getNrOfRows()};
+        DeviceBuffer inputDB = input.getDeviceBuffer();
+        
+        int[] iDim = inputDB.getDeviceDimension();
         int[] fDim = new int[]{filter.getNrOfColumns(), filter.getNrOfRows()};
+        int[] fps = new int[]{filter.getNrOfSlices() / input.getNrOfSlices()};
         int[] ps = new int[]{stride};
 
-        cl_mem memInput = input.getCLReadMem();
-        cl_mem memFilter = filter.getCLReadMem();
+        cl_mem memInput = inputDB.getCLReadMem();
+        
+        DeviceBuffer filterDB = filter.getDeviceBuffer();
+        cl_mem memFilter = filterDB.getCLReadMem();
 
-        clEnqueueWriteBuffer(commandQueue, memInput, CL_TRUE, 0, input.getSliceSize()
-                * Sizeof.cl_float, input.getCLPointer(), 0, null, null);
+        GPU.zeroFillR(input);
+        GPU.uploadRMatrix(input);
+
         clEnqueueWriteBuffer(commandQueue, memFilter, CL_TRUE, 0, filter.getSize()
-                * Sizeof.cl_float, filter.getCLPointer(), 0, null, null);
+                * Sizeof.cl_float, filterDB.getCLPointer(), 0, null, null);
 
-        int deviceCols = output.getDeviceColumns();
-        int deviceRows = output.getDeviceRows();
+        
+        DeviceBuffer outputDB = output.getDeviceBuffer();
+        int deviceCols = outputDB.getDeviceColumns();
+        int deviceRows = outputDB.getDeviceRows();
 
         int[] oDim = new int[]{deviceCols, deviceRows};
-        cl_mem memOutput = output.getCLReadWriteMem();
+        cl_mem memOutput = outputDB.getCLReadWriteMem();
 
         float zero[] = new float[1];
         clEnqueueFillBuffer(commandQueue, memOutput, Pointer.to(zero), Float.BYTES, 0, deviceCols * deviceRows * Float.BYTES, 0, null, null);
 
-        int result = clSetKernelArg(batchCorrelation, 0, Sizeof.cl_mem, Pointer.to(memInput));
-        result = clSetKernelArg(batchCorrelation, 1, Sizeof.cl_mem, Pointer.to(memFilter));
-        result = clSetKernelArg(batchCorrelation, 2, Sizeof.cl_mem, Pointer.to(memOutput));
-        result = clSetKernelArg(batchCorrelation, 3, Sizeof.cl_int2, Pointer.to(iDim));
-        result = clSetKernelArg(batchCorrelation, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        result = clSetKernelArg(batchCorrelation, 5, Sizeof.cl_int2, Pointer.to(oDim));
-        result = clSetKernelArg(batchCorrelation, 6, Sizeof.cl_int, Pointer.to(ps));
+        clSetKernelArg(batchCorrelation, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(batchCorrelation, 1, Sizeof.cl_mem, Pointer.to(memFilter));
+        clSetKernelArg(batchCorrelation, 2, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(batchCorrelation, 3, Sizeof.cl_int2, Pointer.to(iDim));
+        clSetKernelArg(batchCorrelation, 4, Sizeof.cl_int2, Pointer.to(fDim));
+        clSetKernelArg(batchCorrelation, 5, Sizeof.cl_int, Pointer.to(fps));
+        clSetKernelArg(batchCorrelation, 6, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(batchCorrelation, 7, Sizeof.cl_int, Pointer.to(ps));
 
         long globalSize[] = new long[3];
         globalSize[0] = deviceCols;
@@ -254,7 +207,63 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        downloadRWMatrix(output);
+        GPU.downloadRWMatrix(output);
+    }
+
+    public void batchBackpropCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
+        DeviceBuffer inputDB = input.getDeviceBuffer();
+        int[] iDim = inputDB.getDeviceDimension();
+        int[] fDim = new int[]{filter.getNrOfColumns(), filter.getNrOfRows()};
+        int[] fps = new int[]{filter.getNrOfSlices() / output.getNrOfSlices()};
+        int[] ps = new int[]{stride};
+
+        cl_mem memInput = inputDB.getCLReadMem();
+        
+        DeviceBuffer filterDB = filter.getDeviceBuffer();
+        cl_mem memFilter = filterDB.getCLReadMem();
+
+        GPU.zeroFillR(input);
+        GPU.uploadRMatrix(input);
+
+        clEnqueueWriteBuffer(commandQueue, memFilter, CL_TRUE, 0, filter.getSize()
+                * Sizeof.cl_float, filterDB.getCLPointer(), 0, null, null);
+
+        DeviceBuffer outputDB = output.getDeviceBuffer();
+        int deviceCols = outputDB.getDeviceColumns();
+        int deviceRows = outputDB.getDeviceRows();
+
+        int[] oDim = new int[]{deviceCols, deviceRows};
+        cl_mem memOutput = outputDB.getCLReadWriteMem();
+
+        GPU.zeroFillRW(output);
+
+        clSetKernelArg(batchBackpropCorrelation, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(batchBackpropCorrelation, 1, Sizeof.cl_mem, Pointer.to(memFilter));
+        clSetKernelArg(batchBackpropCorrelation, 2, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(batchBackpropCorrelation, 3, Sizeof.cl_int2, Pointer.to(iDim));
+        clSetKernelArg(batchBackpropCorrelation, 4, Sizeof.cl_int2, Pointer.to(fDim));
+        clSetKernelArg(batchBackpropCorrelation, 5, Sizeof.cl_int, Pointer.to(fps));
+        clSetKernelArg(batchBackpropCorrelation, 6, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(batchBackpropCorrelation, 7, Sizeof.cl_int, Pointer.to(ps));
+
+        long globalSize[] = new long[3];
+        globalSize[0] = deviceCols;
+        globalSize[1] = deviceRows;
+        globalSize[2] = output.getNrOfSlices();
+
+        long localSize[] = new long[]{32, 32, 1};
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                batchBackpropCorrelation,
+                3,
+                null,
+                globalSize,
+                localSize,
+                0,
+                null,
+                null);
+
+        GPU.downloadRWMatrix(output);
     }
 
 }

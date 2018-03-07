@@ -13,6 +13,8 @@ import java.util.Random;
  */
 public abstract class AbstractLayer implements ILayer {
 
+    private String name;
+
     private final int nrOfInputs;
     private final int nrOfOutputs;
     // multiplication of the output in slices.
@@ -87,6 +89,26 @@ public abstract class AbstractLayer implements ILayer {
     }
 
     /**
+     * Set the name of this layer.
+     *
+     * @param name the name of the layer.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    /**
+     * Returns the name of this layer.
+     *
+     * @return the name of the layer.
+     */
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    /**
      * @return the nrOfInputs
      */
     @Override
@@ -125,6 +147,7 @@ public abstract class AbstractLayer implements ILayer {
      * @return the output matrix of this layer, with the result expressed as a 1
      * x nrOfOutputs matrix.
      */
+    @Override
     public fmatrix getOutputs() {
         return this.outputs;
     }
@@ -135,6 +158,7 @@ public abstract class AbstractLayer implements ILayer {
      * @return the error matrix of this layer, with the result expressed as a 1
      * x nrOfOutputs matrix.
      */
+    @Override
     public fmatrix getErrors() {
         return errors;
     }
@@ -170,9 +194,13 @@ public abstract class AbstractLayer implements ILayer {
      */
     @Override
     public void setInputs(imatrix inputs) {
-        fmatrix.copyInto(inputs, this.inputs);
+        if (inputs.isRowVector()) {
+            fmatrix.copyInto(inputs, this.inputs);
+        } else {
+            fmatrix.matrixToRowVector(inputs, this.inputs);
+        }
         for (int i = nrOfInputs; i < n; i++) {
-            for (int r = 0; r < inputs.getNrOfRows(); ++r) {
+            for (int r = 0; r < this.inputs.getNrOfRows(); ++r) {
                 this.inputs.set(r, i, 1);
             }
         }
@@ -192,8 +220,16 @@ public abstract class AbstractLayer implements ILayer {
      *
      * @param ideals the ideal values.
      */
+    @Override
     public void setIdeal(imatrix ideals) {
         fmatrix.copyInto(ideals, this.ideal);
+    }
+    
+    /**
+     * Returns the target matrix.
+     */
+    public imatrix getIdeal(){
+        return this.ideal;
     }
 
     /**
@@ -209,29 +245,22 @@ public abstract class AbstractLayer implements ILayer {
      * the actual weights.
      *
      * @param learningRate the learning rate for the back propagation.
-     * @param calculateErrors calculate the deltas by subtracting the ideals
-     * from the outputs.
      */
     @Override
-    public void backpropagate(float learningRate, boolean calculateErrors) {
+    public void backpropagate(float learningRate) {
 
-        // 2. multiply with derivative of activation function. 
+        // 1. multiply with derivative of activation function. 
         // Note: derivative is f'(net input) but this is typically expressed
         // in terms of the output of the activation function.
-        // 2.a copy the outputs into the derivatives matrix.
+        // 1.a copy the outputs into the derivatives matrix.
         fmatrix.copyInto(this.outputs, this.derivatives);
-        // 2.b apply the derivative of the activation function to the output.
+        // 1.b apply the derivative of the activation function to the output.
         derivatives.applyFunction(this.derivedActivation);
 
-        // 1. copy output - ideal (target) into deltas.
-        if (calculateErrors) {
-            fmatrix.dotsubtract(errors, this.outputs, this.ideal);
-        }
-
-        // 3. multiply the derivatives with the errors.
+        // 2. multiply the derivatives with the errors.
         fmatrix.dotmultiply(deltas, errors, derivatives);
 
-        // 4. Calculate the new weights
+        // 3. Calculate the new weights
         calculateNewWeights(learningRate);
     }
 
@@ -255,9 +284,11 @@ public abstract class AbstractLayer implements ILayer {
 
     /**
      * Apply the changes in weights to the weight matrix.
+     * 
+     * @param factor the factor for the weights.
      */
     @Override
-    public abstract void adaptWeights();
+    public abstract void adaptWeights(float factor);
 
     /**
      * Randomize all the weights.

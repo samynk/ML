@@ -9,11 +9,6 @@ __kernel void convolution(
 {
     int gCol = get_global_id(0);
     int gRow = get_global_id(1);
-    
-
-    
-    
-    
 
     float sum = 0;
     // column major
@@ -36,10 +31,11 @@ __kernel void convolution(
 
 __kernel void batchConvolution(
     const __global float* input,
-    __constant float* filter,
+    const __global float* filter,
     __global float* output,
     const int2 iDim,
     const int2 fDim,
+    const int filtersPerSlice,
     const int2 oDim,
     const int stride
 )
@@ -48,6 +44,7 @@ __kernel void batchConvolution(
     int gRow = get_global_id(1)* stride;
     int filterNr = get_global_id(2);
 
+    int inputSliceOffset = iDim.x * iDim.y * (filterNr/filtersPerSlice);
     int filterSliceOffset = fDim.x * fDim.y * filterNr;
     int outputSliceOffset = oDim.x * oDim.y * filterNr;
 
@@ -57,22 +54,61 @@ __kernel void batchConvolution(
         for(int fCol = 0;fCol< fDim.x;++fCol){
             int inputCol = gCol + fCol;
             int inputColOffset = inputCol * iDim.y;
-            int inputI = inputRow  + inputColOffset;
+            int inputI = inputRow  + inputColOffset+inputSliceOffset;
             
             int filterColOffset = fCol * fDim.y;
             int filterI = fRow + filterColOffset + filterSliceOffset ;
             sum += input[inputI] * filter[filterI];
         }
     }
-    output[ gRow + gCol * oDim.y + outputSliceOffset ] = sum;
+    int oIndex = gRow + gCol * oDim.y + outputSliceOffset;
+    output[ oIndex ] = sum;
 }
 
 __kernel void batchCorrelate(
     const __global float* input,
-    __constant float* filter,
+    const __global float* filter,
     __global float* output,
     const int2 iDim,
     const int2 fDim,
+    const int filtersPerSlice,
+    const int2 oDim,
+    const int stride
+)
+{
+    int gCol = get_global_id(0)* stride;
+    int gRow = get_global_id(1)* stride;
+    int filterNr = get_global_id(2);
+
+    // int filterSliceSize = fDim.x*fDim.y;
+    int inputSliceOffset = iDim.x * iDim.y * (filterNr/filtersPerSlice);
+    int filterSliceOffset = fDim.x * fDim.y * filterNr;
+    int outputSliceOffset = oDim.x * oDim.y * filterNr;
+
+    float sum = 0;
+    for(int fRow = 0;  fRow < fDim.y; ++fRow){
+        int inputRow = gRow + fRow;   
+        for(int fCol = 0;fCol< fDim.x;++fCol){
+            int inputCol = gCol + fCol;
+            int inputColOffset = inputCol * iDim.y;
+            int inputI = inputRow  + inputColOffset + inputSliceOffset;
+            
+            int fColOffset = (fDim.x - fCol - 1) * fDim.y;
+            int fRowOffset = (fDim.y - fRow - 1);
+            int filterI = fRowOffset + fColOffset + filterSliceOffset ;
+            sum += input[inputI] * filter[filterI];
+        }
+    }
+    output[ gRow + gCol * oDim.y + outputSliceOffset ] = sum;
+}
+
+__kernel void batchBackpropCorrelate(
+    const __global float* input,
+    const __global float* filter,
+    __global float* output,
+    const int2 iDim,
+    const int2 fDim,
+    const int filtersPerSlice,
     const int2 oDim,
     const int stride
 )
@@ -82,21 +118,29 @@ __kernel void batchCorrelate(
     int filterNr = get_global_id(2);
 
     int filterSliceSize = fDim.x*fDim.y;
-    int filterSliceOffset = filterSliceSize * filterNr;
+    int inputSliceSize = iDim.x*iDim.y;
+    int filterBlockOffset = filterSliceSize * filtersPerSlice * filterNr;
+    int inputBlockOffset = inputSliceSize * filtersPerSlice * filterNr;
+
     int outputSliceOffset = oDim.x * oDim.y * filterNr;
-    
 
     float sum = 0;
-    for(int fRow = 0;  fRow < fDim.y; ++fRow){
-        int inputRow = gRow + fRow;   
-        for(int fCol = 0;fCol< fDim.x;++fCol){
-            int inputCol = gCol + fCol;
-            int inputColOffset = inputCol * iDim.y;
-            int inputI = inputRow  + inputColOffset;
+    for(int iSlice = 0; iSlice < filtersPerSlice; ++iSlice){
+        int filterOffset = filterSliceSize * iSlice;
+        int inputOffset = inputSliceSize * iSlice;
+        
+        for(int fRow = 0;  fRow < fDim.y; ++fRow){
+            int inputRow = gRow + fRow;   
+            for(int fCol = 0;fCol< fDim.x;++fCol){
+                int inputCol = gCol + fCol;
+                int inputColOffset = inputCol * iDim.y;
+                int inputI = inputRow  + inputColOffset + inputOffset + inputBlockOffset;
             
-            int filterColOffset = fCol * fDim.y;
-            int filterI = (filterSliceSize - fRow - filterColOffset) + filterSliceOffset ;
-            sum += input[inputI] * filter[filterI];
+                int fColOffset = (fDim.x - fCol - 1) * fDim.y;
+                int fRowOffset = (fDim.y - fRow - 1);
+                int filterI = fRowOffset + fColOffset + filterOffset + filterBlockOffset;
+                sum += input[inputI] * filter[filterI];
+            }
         }
     }
     output[ gRow + gCol * oDim.y + outputSliceOffset ] = sum;
