@@ -17,17 +17,15 @@ import org.jocl.cl_mem;
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
 public class IntMatrixOpGpu {
-    public static cl_mem createReadMem(intmatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_ONLY,
-                (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
-                * Sizeof.cl_int, null, null);
+
+    public static cl_mem createMem(intmatrix cpuBuffer, int padding, long mode) {
+        int zp = cpuBuffer.getZeroPadding();
+        int totalSize = (cpuBuffer.getNrOfRows() + 2 * zp)
+                * (cpuBuffer.getNrOfColumns() + 2 * zp)
+                * cpuBuffer.getNrOfSlices()
+                * cpuBuffer.getNrOfHyperSlices() + padding;
+        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, mode,
+                (totalSize + padding) * Sizeof.cl_int, null, null);
         return mem;
     }
-
-    public static cl_mem createReadWriteMem(intmatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_WRITE,
-                (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
-                * Sizeof.cl_int, null, null);
-        return mem;
-    } 
 }

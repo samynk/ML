@@ -98,6 +98,20 @@ public interface FMatrixOp {
     public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output);
 
     /**
+     * Calculates a fuzzification layer.
+     *
+     * @param input the inputs to fuzzify.
+     * @param a the weights that determine the slopes of the transition.
+     * @param b the weights that determine the crossing point between two
+     * classes.
+     * @param output the fuzzified input.
+     */
+    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix output);
+
+    /**
+     * Calculates the gradients for the a
+     */
+    /**
      * Calculates the sigmoid activation function. The result is stored back
      * into the given matrix.
      *
@@ -124,8 +138,8 @@ public interface FMatrixOp {
     public imatrix dotadd(imatrix result, imatrix op1, imatrix op2);
 
     /**
-     * Calculates the element by element addition of 
-     * factor1 * op1 and factor2 * op2.
+     * Calculates the element by element addition of factor1 * op1 and factor2 *
+     * op2.
      *
      * @param result the matrix to store the result.
      * @param factor1 the first factor.
@@ -155,4 +169,14 @@ public interface FMatrixOp {
      * @return the result matrix
      */
     public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2);
+
+    /**
+     * Copies one matrix into another matrix. The number of rows,columns slices
+     * and hyperslices copied is the minimum of the corresponding dimensions of
+     * both matrices.
+     *
+     * @param toCopy the matrix to copy.
+     * @param dest the destination matrix.
+     */
+    public void copyInto(imatrix toCopy, imatrix dest);
 }

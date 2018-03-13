@@ -24,6 +24,8 @@ public class PoolKernel extends OpenCLKernel {
     private cl_kernel maxPool;
     private cl_kernel bpMaxPool;
 
+    private final long[] localWorkSize = new long[]{32};
+
     public PoolKernel() {
         super("/kernels/pool.cl");
     }
@@ -37,79 +39,71 @@ public class PoolKernel extends OpenCLKernel {
     }
 
     public void maxPool(imatrix input, imatrix output, intmatrix maskLayer) {
-        DeviceBuffer inputDB = input.getDeviceBuffer();
-        DeviceBuffer outputDB = output.getDeviceBuffer();
-        
-        int[] iDim = inputDB.getDeviceDimension();
-        int[] oDim = outputDB.getDeviceDimension();
-        
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+        IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
+
         int scaleX = input.getNrOfColumns() / output.getNrOfColumns();
         int scaleY = input.getNrOfRows() / output.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
-        cl_mem memInput = GPU.uploadRMatrix(input);
-        cl_mem memMask = maskLayer.getCLReadWriteMem();
-        cl_mem memOutput = outputDB.getCLReadWriteMem();
+        cl_mem memInput = inputDB.uploadRMatrix();
+        cl_mem memMask = maskDB.getRMem();
+        cl_mem memOutput = outputDB.getRWMem();
 
         clSetKernelArg(maxPool, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(maxPool, 1, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(maxPool, 2, Sizeof.cl_mem, Pointer.to(memMask));
-        clSetKernelArg(maxPool, 3, Sizeof.cl_int2, Pointer.to(iDim));
+        clSetKernelArg(maxPool, 3, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
         clSetKernelArg(maxPool, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        clSetKernelArg(maxPool, 5, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(maxPool, 5, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
 
-        int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
-        long globalSize[] = new long[]{oDim[0], oDim[1], slices};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 maxPool,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                outputDB.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(output);
-        GPU.downloadRWMatrix(maskLayer);
+        outputDB.markRWMatrixAsMaster();
+        maskDB.markRWMatrixAsMaster();
     }
-    
-    public void backpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output)
-    {
-        DeviceBuffer inputDB = input.getDeviceBuffer();
-        DeviceBuffer outputDB = output.getDeviceBuffer();
-        
+
+    public void backpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+
         int[] iDim = inputDB.getDeviceDimension();
         int[] oDim = outputDB.getDeviceDimension();
         int scaleX = output.getNrOfColumns() / input.getNrOfColumns();
         int scaleY = output.getNrOfRows() / input.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
         cl_mem memInput = GPU.uploadRMatrix(input);
-        cl_mem memMask = maskLayer.getCLReadWriteMem();
-        cl_mem memOutput = outputDB.getCLReadWriteMem();
+        cl_mem memMask = maskDB.getRWMem();
+        cl_mem memOutput = outputDB.getRWMem();
 
         clSetKernelArg(bpMaxPool, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(bpMaxPool, 1, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(bpMaxPool, 2, Sizeof.cl_mem, Pointer.to(memMask));
-        clSetKernelArg(bpMaxPool, 3, Sizeof.cl_int2, Pointer.to(iDim));
+        clSetKernelArg(bpMaxPool, 3, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
         clSetKernelArg(bpMaxPool, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        clSetKernelArg(bpMaxPool, 5, Sizeof.cl_int2, Pointer.to(oDim));
+        clSetKernelArg(bpMaxPool, 5, Sizeof.cl_int2, Pointer.to(outputDB.getDimensionSizes()));
 
-        int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
-        long globalSize[] = new long[]{oDim[0], oDim[1], slices};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 bpMaxPool,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                outputDB.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(output);
+        outputDB.markRWMatrixAsMaster();
     }
 }

@@ -1,10 +1,8 @@
 package dae.matrix;
 
-import dae.matrix.gpu.DeviceBuffer;
+import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
-import org.jocl.Pointer;
-import org.jocl.cl_mem;
 
 /**
  *
@@ -16,9 +14,12 @@ public class fsubmatrix implements imatrix {
     private final int rb;
     private final int cb;
     private final int sb;
+    private final int hb;
+
     private final int rows;
     private final int columns;
     private final int slices;
+    private final int hyperslices;
 
     /**
      * Creates a sub matrix which uses another matrix as backing source.
@@ -45,14 +46,43 @@ public class fsubmatrix implements imatrix {
      * @param slices the number of slices in the submatrix.
      */
     public fsubmatrix(imatrix source, int rb, int cb, int sb, int rows, int columns, int slices) {
+        this(source, rb, cb, sb, 0, rows, columns, slices, 1);
+    }
+
+    /**
+     * Creates a sub matrix which uses another matrix as backing source.
+     *
+     * @param source the source matrix of this matrix.
+     * @param rb the row base of the submatrix.
+     * @param cb the column base of the submatrix.
+     * @param sb the slice base of the submatrix.
+     * @param hb the hyper slice base of the submatrix.
+     * @param rows the number of rows in the submatrix.
+     * @param columns the number of columns in the submatrix.
+     * @param slices the number of slices in the submatrix.
+     * @param hyperslices the number of hyperslices in the submatrix.
+     */
+    public fsubmatrix(imatrix source, int rb, int cb, int sb, int hb, int rows, int columns, int slices, int hyperslices) {
         this.source = source;
         this.rb = Math.max(rb, 0);
         this.cb = Math.max(cb, 0);
         this.sb = Math.max(sb, 0);
+        this.hb = Math.max(hb, 0);
 
-        this.rows = Math.min(source.getNrOfRows(), Math.max(rows, 0));
-        this.columns = Math.min(source.getNrOfColumns(), Math.max(columns, 0));
-        this.slices = Math.min(source.getNrOfSlices(), Math.max(slices, 0));
+        this.rows = Math.min(source.getNrOfRows(), Math.max(rows - rb, 0));
+        this.columns = Math.min(source.getNrOfColumns(), Math.max(columns - cb, 0));
+        this.slices = Math.min(source.getNrOfSlices(), Math.max(slices - sb, 0));
+        this.hyperslices = Math.min(source.getNrOfHyperSlices(), Math.max(hyperslices - hb, 0));
+    }
+
+    /**
+     * Returns a name for the matrix object.
+     *
+     * @return the name of the matrix object.
+     */
+    @Override
+    public String getName() {
+        return source.getName();
     }
 
     /**
@@ -84,6 +114,11 @@ public class fsubmatrix implements imatrix {
     @Override
     public void set(int row, int column, int slice, float value) {
         source.set(row - rb, column - cb, slice - sb, value);
+    }
+
+    @Override
+    public void set(int row, int column, int slice, int hyperslice, float value) {
+        source.set(row - rb, column - cb, slice - sb, hyperslice - hb, value);
     }
 
     @Override
@@ -123,7 +158,21 @@ public class fsubmatrix implements imatrix {
 
     @Override
     public float get(int row, int column, int slice) {
-        return source.get(row - rb, column - cb);
+        return source.get(row - rb, column - cb, slice - sb);
+    }
+
+    /**
+     * Gets the value of a cell.
+     *
+     * @param row the row of the cell.
+     * @param column the column of the cell.
+     * @param slice the slice of the cell.
+     * @param hyperslice the hyperslice of the cell.
+     * @return the value of the cell.
+     */
+    @Override
+    public float get(int row, int column, int slice, int hyperslice) {
+        return source.get(row - rb, column - cb, slice - sb, hyperslice - hb);
     }
 
     @Override
@@ -139,6 +188,11 @@ public class fsubmatrix implements imatrix {
     @Override
     public int getNrOfSlices() {
         return slices;
+    }
+
+    @Override
+    public int getNrOfHyperSlices() {
+        return hyperslices;
     }
 
     /**
@@ -224,8 +278,16 @@ public class fsubmatrix implements imatrix {
      * @return the DeviceBuffer object.
      */
     @Override
-    public DeviceBuffer getDeviceBuffer() {
+    public FloatDeviceBuffer getDeviceBuffer() {
         return this.source.getDeviceBuffer();
+    }
+    
+    /**
+     * Synchronizes the host buffer with the device buffer if necessary.
+     */
+    @Override
+    public void sync(){
+        source.sync();
     }
 
     @Override

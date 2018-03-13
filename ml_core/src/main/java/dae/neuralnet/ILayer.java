@@ -2,7 +2,7 @@ package dae.neuralnet;
 
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
-import dae.neuralnet.cost.CostFunction;
+import dae.neuralnet.activation.ActivationFunction;
 import java.util.Random;
 
 /**
@@ -34,6 +34,12 @@ public interface ILayer {
      * @return the total number of outputs.
      */
     public int getNrOfOutputs();
+    
+    /**
+     * Returns the activation function for this layer.
+     * @return the activation function.
+     */
+    public ActivationFunction getActivationFunction();
 
     /**
      * Multiplies the input matrix with the weight matrix and stores the result
@@ -111,6 +117,12 @@ public interface ILayer {
      * @param max the maximum value for the random weight.
      */
     public void randomizeWeights(Random r, float min, float max);
+    
+    /**
+     * Analyzes the weights in the layer.
+     *
+     */
+    public void analyzeWeights();
 
     /**
      * Writes the weights as an image to the given file location.

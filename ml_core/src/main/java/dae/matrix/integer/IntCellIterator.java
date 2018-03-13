@@ -11,7 +11,8 @@ public interface IntCellIterator {
      * @param row the row of the current cell.
      * @param column the column of the current cell.
      * @param slice the slice of the current cell.
+     * @param hyperSlice the hyperslice of the current cell.
      * @param currentValue the current value of the cell.
      */
-    public void cell(intmatrix source, int row, int column, int slice, int currentValue);
+    public void cell(intmatrix source, int row, int column, int slice, int hyperSlice, int currentValue);
 }

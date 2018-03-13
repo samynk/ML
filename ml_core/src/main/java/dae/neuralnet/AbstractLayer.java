@@ -17,8 +17,6 @@ public abstract class AbstractLayer implements ILayer {
 
     private final int nrOfInputs;
     private final int nrOfOutputs;
-    // multiplication of the output in slices.
-    private final int nrOfOutputSlices;
     private final int nrOfBiases;
     private final int batchSize;
 
@@ -68,24 +66,33 @@ public abstract class AbstractLayer implements ILayer {
     public AbstractLayer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af) {
         this.nrOfInputs = nrOfInputs;
         this.nrOfOutputs = nrOfOutputs;
-        this.nrOfOutputSlices = 1;
         this.nrOfBiases = nrOfBiases;
         this.batchSize = batchSize;
 
         n = nrOfInputs + nrOfBiases;
-        this.inputs = new fmatrix(batchSize, n);
+        this.inputs = new fmatrix(1, n, 1, batchSize);
         this.tinputs = new tmatrix(this.inputs);
 
-        this.deltas = new fmatrix(batchSize, nrOfOutputs);
-        this.derivatives = new fmatrix(batchSize, nrOfOutputs);
+        this.deltas = new fmatrix(1, nrOfOutputs, 1, batchSize);
+        this.derivatives = new fmatrix(1, nrOfOutputs, 1, batchSize);
 
-        this.outputs = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
-        this.errors = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
-        this.ideal = new fmatrix(batchSize, nrOfOutputs, nrOfOutputSlices);
+        this.outputs = new fmatrix(1, nrOfOutputs, 1, batchSize);
+        this.errors = new fmatrix(1, nrOfOutputs, 1, batchSize);
+        this.ideal = new fmatrix(1, nrOfOutputs, 1, batchSize);
 
         function = af;
         activation = af.getActivation();
         derivedActivation = af.getDerivedActivation();
+    }
+
+    /**
+     * Returns the activation function for this layer.
+     *
+     * @return the activation function.
+     */
+    @Override
+    public ActivationFunction getActivationFunction() {
+        return this.function;
     }
 
     /**
@@ -173,20 +180,6 @@ public abstract class AbstractLayer implements ILayer {
     }
 
     /**
-     * Sets the inputs of this neural net. The biases will be set to one to
-     * maintain their integrity.
-     *
-     * @param inputs the inputs to set.
-     */
-    public void setInputs(float... inputs) {
-        this.inputs.setRow(0, inputs);
-        // set biases to one.
-        for (int i = nrOfInputs; i < n; i++) {
-            this.inputs.set(0, i, 1);
-        }
-    }
-
-    /**
      * Copies the inputs matrix into the input matrix of this layer. The bias
      * terms will be reset to one after this operation.
      *
@@ -224,11 +217,11 @@ public abstract class AbstractLayer implements ILayer {
     public void setIdeal(imatrix ideals) {
         fmatrix.copyInto(ideals, this.ideal);
     }
-    
+
     /**
      * Returns the target matrix.
      */
-    public imatrix getIdeal(){
+    public imatrix getIdeal() {
         return this.ideal;
     }
 
@@ -284,7 +277,7 @@ public abstract class AbstractLayer implements ILayer {
 
     /**
      * Apply the changes in weights to the weight matrix.
-     * 
+     *
      * @param factor the factor for the weights.
      */
     @Override

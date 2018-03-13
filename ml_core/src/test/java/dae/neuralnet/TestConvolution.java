@@ -10,6 +10,10 @@ import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.cost.CrossEntropyCostFunction;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
+import dae.neuralnet.io.DeepLayerReader;
+import dae.neuralnet.io.DeepLayerWriter;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Random;
 import org.junit.After;
@@ -25,10 +29,12 @@ import org.junit.Test;
 public class TestConvolution {
 
     private static final int TEST_ITERATIONS = 1000;
-    private static final int TRAIN_ITERATIONS = 2000000;
+    private static final int TRAIN_ITERATIONS = 10000;
     private static final int WEIGHT_DEBUG_CYCLE = 1000;
-    private static final int BATCH_SIZE = 100;
-    private static final float LEARNING_RATE = .05f;
+    private static final int BATCH_SIZE = 5;
+    private static final float LEARNING_RATE = .01f;
+
+    private String neuralNetBase = "2018_3_9/14_19";
 
     public TestConvolution() {
     }
@@ -49,7 +55,6 @@ public class TestConvolution {
     public void tearDown() {
     }
 
-    @Test
     public void testConvolution() {
         // creates a convolution layer with 5 filters with a filter size of 5x5.
         // The input will be interpreted as a 28x28 image.
@@ -109,7 +114,75 @@ public class TestConvolution {
                 dl.writeWeightImages(weightFolder, i);
             }
         }
+
         dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
+        testDigitRecognition(dl, 1, r);
+    }
+
+    
+    public void testConvolution2() {
+        // creates a convolution layer with 5 filters with a filter size of 5x5.
+        // The input will be interpreted as a 28x28 image.
+        // The stride is one and the batch size is also one (only batch size of 1 is supported at the moment).
+
+        //Layer full2 = new Layer(784, 1, 14*14, ActivationFunction.SIGMOID);
+        ConvolutionLayer cl1 = new ConvolutionLayer(28, 28, 32, 5, 1, ActivationFunction.LEAKYRELU);
+        cl1.setName("Conv1");
+        PoolLayer pl1 = new PoolLayer(28, 28, 32, 2, 2);
+        pl1.setName("Pool1");
+
+        FuzzyficationLayer fl = new FuzzyficationLayer(pl1.getNrOfOutputs(), 10);
+
+        Layer full = new Layer(fl.getNrOfOutputs(), 0, 10, ActivationFunction.CESIGMOID);
+        full.setName("full");
+        full.setDropRate(.003f);
+
+        DeepLayer dl = new DeepLayer(new LearningRateConst(LEARNING_RATE), cl1, pl1, fl, full);
+        dl.setCostFunction(new CrossEntropyCostFunction());
+
+        BinImageReader bir = new BinImageReader("/data/train-images.idx3-ubyte.bin");
+        fmatrix images = bir.getResult();
+        System.out.println(images.getSizeAsString());
+
+        BinLabelReader blr = new BinLabelReader("/data/train-labels.idx1-ubyte.bin");
+        fmatrix trainSetLabels = blr.getResult();
+        System.out.println(trainSetLabels.getSizeAsString());
+
+        Random r = new Random(System.currentTimeMillis());
+        dl.randomizeWeights(r, -.1f, .1f);
+
+        int maxImage = images.getNrOfColumns();
+        fmatrix image = new fmatrix(1, images.getNrOfColumns());
+        fmatrix target = new fmatrix(1, 10);
+
+        System.out.println(image.getSizeAsString());
+        String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
+        for (int i = 0; i < TRAIN_ITERATIONS; ++i) {
+            target.reset();
+            for (int b = 0; b < 1; ++b) {
+                int nextImage = r.nextInt(maxImage);
+                images.getRow(nextImage, b, image);
+
+                int digit = (int) trainSetLabels.get(0, nextImage);
+                target.set(b, digit, 1);
+            }
+            dl.train(i, image, target, TrainingMode.BATCH);
+//            if (i == 0) {
+//                dl.writeOutputImages();
+//            }
+            if (i % BATCH_SIZE == 0) {
+                dl.adaptWeights(i, BATCH_SIZE);
+            }
+
+            if (i % WEIGHT_DEBUG_CYCLE == 0) {
+                dl.writeWeightImages(weightFolder, i);
+            }
+        }
+        dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
+
+        DeepLayerWriter dlw = new DeepLayerWriter();
+        Path export = Paths.get(System.getProperty("user.home"), ".nn", weightFolder, "final.nn");
+        dlw.writeDeepLayer(export, dl);
         testDigitRecognition(dl, 1, r);
     }
 
@@ -161,4 +234,65 @@ public class TestConvolution {
         System.out.println("Number of successes : " + succesRate + "%");
     }
 
+    @Test
+    public void testNeuralNet() {
+        Path importPath = Paths.get(System.getProperty("user.home"), ".nn", "weights", this.neuralNetBase, "final21.nn");
+        DeepLayerReader dr = new DeepLayerReader();
+        DeepLayer dl = dr.readDeepLayer(importPath);
+        dl.analyzeWeights();
+        
+        testDigitRecognition(dl);
+
+    }
+
+    private void testDigitRecognition(DeepLayer dl) {
+        BinImageReader bir = new BinImageReader("/data/train-images.idx3-ubyte.bin");
+        fmatrix images = bir.getResult();
+        System.out.println(images.getSizeAsString());
+
+        BinLabelReader blr = new BinLabelReader("/data/train-labels.idx1-ubyte.bin");
+        fmatrix trainSetLabels = blr.getResult();
+        System.out.println(trainSetLabels.getSizeAsString());
+
+        int maxImage = images.getNrOfColumns();
+        fmatrix image = new fmatrix(1, images.getNrOfColumns());
+        fmatrix target = new fmatrix(1, 10);
+
+        Random r = new java.util.Random(System.currentTimeMillis());
+        String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
+        for (int i = 0; i < TRAIN_ITERATIONS; ++i) {
+            target.reset();
+            for (int b = 0; b < 1; ++b) {
+                int nextImage = r.nextInt(maxImage);
+                images.getRow(nextImage, b, image);
+
+                int digit = (int) trainSetLabels.get(0, nextImage);
+                target.set(b, digit, 1);
+            }
+            dl.train(i, image, target, TrainingMode.BATCH);
+//            if (i == 0) {
+//                dl.writeOutputImages();
+//            }
+            if ((i+1) % BATCH_SIZE == 0) {
+                dl.adaptWeights(i, BATCH_SIZE);
+            }
+
+            if (i % WEIGHT_DEBUG_CYCLE == 0) {
+                dl.writeWeightImages(weightFolder, i);
+            }
+        }
+        dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
+
+        DeepLayerWriter dlw = new DeepLayerWriter();
+        Path origin = null;
+        boolean increment = false;
+        if (dl.getMetaData().getPath() != null) {
+            origin = dl.getMetaData().getPath();
+            increment = true;
+        } else {
+            origin = Paths.get(System.getProperty("user.home"), ".nn", weightFolder, "final.nn");
+        }
+        dlw.writeDeepLayer(origin, increment, dl);
+        testDigitRecognition(dl, 1, r);
+    }
 }

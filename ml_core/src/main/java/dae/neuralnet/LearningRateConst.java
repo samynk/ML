@@ -21,4 +21,13 @@ public class LearningRateConst implements LearningRate {
         return learningRate;
     }
 
+    @Override
+    public boolean equals(Object other){
+        if ( other instanceof LearningRateConst){
+            LearningRateConst lr = (LearningRateConst)other;
+            return Math.abs(lr.learningRate - learningRate) < 0.00001f;
+        }else{
+            return false;
+        }
+    }
 }

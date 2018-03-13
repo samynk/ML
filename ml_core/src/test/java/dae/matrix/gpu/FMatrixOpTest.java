@@ -6,7 +6,6 @@ package dae.matrix.gpu;
 
 import dae.matrix.cpu.FMatrixOpCpu;
 import dae.matrix.fmatrix;
-import dae.matrix.fsubmatrix;
 import dae.matrix.integer.intmatrix;
 import java.nio.FloatBuffer;
 import java.util.Random;
@@ -24,8 +23,8 @@ import static dae.matrix.gpu.MatrixTestUtil.*;
  */
 public class FMatrixOpTest {
 
-    private FMatrixOpCpu cpu = new FMatrixOpCpu();
-    private FMatrixOpGpu gpu = new FMatrixOpGpu();
+    private final FMatrixOpCpu cpu = new FMatrixOpCpu();
+    private final FMatrixOpGpu gpu = new FMatrixOpGpu();
 
     public FMatrixOpTest() {
     }
@@ -56,26 +55,20 @@ public class FMatrixOpTest {
         fmatrix output1 = new fmatrix(input.getNrOfRows() - filter.getNrOfRows() + 1, input.getNrOfColumns() - filter.getNrOfColumns() + 1);
 
         long start1 = System.currentTimeMillis();
-        FMatrixOpGpu gpu = new FMatrixOpGpu();
         gpu.convolve(input, filter, 1, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("GPU time : " + (end1 - start1));
 
         fmatrix output2 = new fmatrix(output1.getNrOfRows(), output1.getNrOfColumns());
         long start = System.currentTimeMillis();
-        FMatrixOpCpu cpu = new FMatrixOpCpu();
+
         cpu.convolve(input, filter, 1, output2);
         long end = System.currentTimeMillis();
 
         System.out.println("CPU time : " + (end - start));
 
-        for (int r = 0; r < output1.getNrOfRows(); ++r) {
-            for (int c = 0; c < output1.getNrOfColumns(); ++c) {
-                float v1 = output1.get(r, c);
-                float v2 = output2.get(r, c);
-                assertEquals("error on :" + r + "," + c, v1, v2, 0.01f);
-            }
-        }
+        output1.sync();
+        assertMatrixEquals(output2, output1);
     }
 
     @Test
@@ -93,15 +86,15 @@ public class FMatrixOpTest {
         fmatrix output2 = new fmatrix(input.getNrOfRows() - filter.getNrOfRows() + 1, input.getNrOfColumns() - filter.getNrOfColumns() + 1, nrOfFilters);
 
         long start1 = System.currentTimeMillis();
-        new FMatrixOpGpu().batchConvolve(input, filter, 1, output1);
+        gpu.batchConvolve(input, filter, 1, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("Batch convolve - GPU time : " + (end1 - start1));
 
         long start2 = System.currentTimeMillis();
-        new FMatrixOpCpu().batchConvolve(input, filter, 1, output2);
+        cpu.batchConvolve(input, filter, 1, output2);
         long end2 = System.currentTimeMillis();
         System.out.println("Batch convolve - CPU time : " + (end2 - start2));
-
+        output1.sync();
         assertMatrixEquals(output1, output2);
     }
 
@@ -157,9 +150,8 @@ public class FMatrixOpTest {
         Random r = new Random();
         int nzpRows = 6;
         int nzpCols = 6;
-        fmatrix input = new fmatrix(nzpRows, nzpCols, 1, P);
-        //input.applyFunction(x -> r.nextFloat());
-        input.applyFunction(x -> 1.0f);
+        fmatrix input = new fmatrix(nzpRows, nzpCols, 1, 1, P);
+        input.randomize(-5, 5);
 
         int O_Col = 1 + (nzpCols - K + 2 * P) / S;
         int O_Row = 1 + (nzpRows - K + 2 * P) / S;
@@ -168,12 +160,13 @@ public class FMatrixOpTest {
         fmatrix output2 = new fmatrix(O_Row, O_Col, nrOfFilters);
 
         long start1 = System.currentTimeMillis();
-        new FMatrixOpGpu().batchConvolve(input, filters, S, output1);
+        gpu.batchConvolve(input, filters, S, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("Batch convolve - GPU time : " + (end1 - start1));
+        output1.sync();
 
         long start2 = System.currentTimeMillis();
-        new FMatrixOpCpu().batchConvolve(input, filters, S, output2);
+        cpu.batchConvolve(input, filters, S, output2);
         long end2 = System.currentTimeMillis();
         System.out.println("Batch convolve - CPU time : " + (end2 - start2));
 
@@ -206,12 +199,13 @@ public class FMatrixOpTest {
 //        System.out.println("filter:");
 //        System.out.println(filter);
         long start1 = System.currentTimeMillis();
-        new FMatrixOpGpu().batchCorrelate(input, filter, 1, output1);
+        gpu.batchCorrelate(input, filter, 1, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("Batch correlate - GPU time : " + (end1 - start1));
+        output1.sync();
 
         long start2 = System.currentTimeMillis();
-        new FMatrixOpCpu().batchCorrelate(input, filter, 1, output2);
+        cpu.batchCorrelate(input, filter, 1, output2);
         long end2 = System.currentTimeMillis();
         System.out.println("Batch correlate - CPU time : " + (end2 - start2));
 
@@ -236,12 +230,13 @@ public class FMatrixOpTest {
         fmatrix output2 = new fmatrix(input.getNrOfRows() - filter.getNrOfRows() + 1, input.getNrOfColumns() - filter.getNrOfColumns() + 1, nrOfFilters * input.getNrOfSlices());
 
         long start1 = System.currentTimeMillis();
-        new FMatrixOpGpu().batchCorrelate(input, filter, 1, output1);
+        gpu.batchCorrelate(input, filter, 1, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("Batch convolve - GPU time : " + (end1 - start1));
-
+        output1.sync();
+        
         long start2 = System.currentTimeMillis();
-        new FMatrixOpCpu().batchCorrelate(input, filter, 1, output2);
+        cpu.batchCorrelate(input, filter, 1, output2);
         long end2 = System.currentTimeMillis();
         System.out.println("Batch convolve - CPU time : " + (end2 - start2));
 
@@ -255,18 +250,19 @@ public class FMatrixOpTest {
     @Test
     public void testBackpropCorrelation() {
         // 4 input slices of 28x28 with zero padding of 2.
-        fmatrix deltas = new fmatrix(28, 28, 4, 2);
+        fmatrix deltas = new fmatrix(28, 28, 4, 1, 2);
         deltas.randomize(-1, 1);
         // 4 filter slices of 5x5 with no zero padding.
         fmatrix filters = new fmatrix(5, 5, 4);
-        filters.applyCellFunction((int row, int column, int slice, float value) -> (slice + 1) * .1f);
+        filters.randomize(-4,4);
         // 2 output slices of 28x28 with no zero padding.
         fmatrix gpu_outputs = new fmatrix(28, 28, 2);
         fmatrix cpu_outputs = new fmatrix(28, 28, 2);
 
         gpu.batchBackpropCorrelate(deltas, filters, 1, gpu_outputs);
         cpu.batchBackpropCorrelate(deltas, filters, 1, cpu_outputs);
-
+        gpu_outputs.sync();
+        
         System.out.println("GPU output");
         System.out.println(gpu_outputs);
         System.out.println("CPU output");
@@ -286,6 +282,7 @@ public class FMatrixOpTest {
 
 //        System.out.println(inputMatrix1);
 //        System.out.println(inputMatrix2);
+        inputMatrix2.sync();
         assertMatrixEquals(inputMatrix1, inputMatrix2);
     }
 
@@ -318,7 +315,7 @@ public class FMatrixOpTest {
         fmatrix.matrixToRowVector(image, testCopy);
         assertMatrixEquals(copy, testCopy);
 
-        // with zero padding.
+        // with hyper slices
         fmatrix src2 = new fmatrix(1, 784, 1, 2);
         Random r = new Random(System.currentTimeMillis());
         src2.applyFunction(x -> r.nextFloat());
@@ -349,6 +346,8 @@ public class FMatrixOpTest {
         cpu.batchMaxPool(input, output1, maskLayer1);
         gpu.batchMaxPool(input, output2, maskLayer2);
 
+        output2.sync();
+        maskLayer2.sync();
         assertMatrixEquals(output1, output2);
         assertMatrixEquals(maskLayer1, maskLayer2);
 
@@ -384,6 +383,7 @@ public class FMatrixOpTest {
         System.out.println("GPU");
         System.out.println(resultGpu);
 
+        resultGpu.sync();
         assertMatrixEquals(resultCpu, resultGpu);
     }
 
@@ -409,7 +409,7 @@ public class FMatrixOpTest {
         System.out.println(resultCpu);
         System.out.println("GPU");
         System.out.println(resultGpu);
-
+        resultGpu.sync();
         assertMatrixEquals(resultCpu, resultGpu);
     }
 
@@ -430,12 +430,12 @@ public class FMatrixOpTest {
 
         cpu.dotadd(resultCpu, .24f, op1, .7f, op2);
         gpu.dotadd(resultGpu, .24f, op1, .7f, op2);
+        resultGpu.sync();
 
-        System.out.println("CPU");
-        System.out.println(resultCpu);
-        System.out.println("GPU");
-        System.out.println(resultGpu);
-
+//        System.out.println("CPU");
+//        System.out.println(resultCpu);
+//        System.out.println("GPU");
+//        System.out.println(resultGpu);
         assertMatrixEquals(resultCpu, resultGpu);
     }
 
@@ -456,6 +456,7 @@ public class FMatrixOpTest {
 
         cpu.dotmultiply(resultCpu, op1, op2);
         gpu.dotmultiply(resultGpu, op1, op2);
+        resultGpu.sync();
 
         System.out.println("CPU");
         System.out.println(resultCpu);
@@ -464,22 +465,31 @@ public class FMatrixOpTest {
 
         assertMatrixEquals(resultCpu, resultGpu);
     }
-    
+
     @Test
-    public void testOperationChain()
-    {
+    public void testOperationChain() {
         // test if matrices are uploaded and downloaded as needed.
         fmatrix op1 = new fmatrix(5, 7, 3);
         op1.randomize(-5, 5);
         fmatrix op2 = new fmatrix(5, 7, 3);
         op2.randomize(-5, 5);
-        
+
         fmatrix resultCpu = new fmatrix(5, 7, 3);
         fmatrix resultGpu = new fmatrix(5, 7, 3);
 
         cpu.dotmultiply(resultCpu, op1, op2);
         gpu.dotmultiply(resultGpu, op1, op2);
-        
-        
+
+    }
+
+    @Test
+    public void testZeroFill() {
+        fmatrix input1 = new fmatrix(100, 107, 5, 2);
+        input1.randomize(-5, 5);
+        fmatrix inputCopy = new fmatrix(100, 107, 5, 2);
+
+        GPU.zeroFillR(input1);
+        GPU.downloadRMatrix(input1);
+        assertMatrixEquals(input1, inputCopy);
     }
 }

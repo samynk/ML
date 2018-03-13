@@ -4,6 +4,7 @@
  */
 package dae.matrix.gpu;
 
+import dae.matrix.BufferSyncState;
 import dae.matrix.imatrix;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
 import static org.jocl.CL.clSetKernelArg;
@@ -25,11 +26,13 @@ public class MatrixOpKernel extends OpenCLKernel {
     cl_kernel dotsubtract;
     cl_kernel dotmultiply;
 
+    private long[] localWorkSize = new long[]{32};
+
     /**
      * Creates a new MatrixOpKernel object.
      */
     public MatrixOpKernel() {
-        super("/kernels/matrixop.cl");
+        super("/kernels/neuralnet/matrixop.cl");
     }
 
     @Override
@@ -43,127 +46,108 @@ public class MatrixOpKernel extends OpenCLKernel {
     }
 
     public imatrix dotadd(imatrix O, imatrix op1, imatrix op2) {
-        DeviceBuffer oDB = O.getDeviceBuffer();
-        int[] oDim = oDB.getDeviceDimension();
-        cl_mem memOutput = oDB.getCLReadWriteMem();
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
+        cl_mem memOutput = oDB.getRWMem();
+        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
 
-        cl_mem mem_op1 = GPU.uploadRMatrix(op1);
-        cl_mem mem_op2 = GPU.uploadRMatrix(op2);
+        clSetKernelArg(dotadd, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(dotadd, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(dotadd, 2, Sizeof.cl_mem, Pointer.to(memOutput));
 
-        clSetKernelArg(dotadd, 0, Sizeof.cl_int2, Pointer.to(oDim));
-
-        clSetKernelArg(dotadd, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
-        clSetKernelArg(dotadd, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
-        clSetKernelArg(dotadd, 3, Sizeof.cl_mem, Pointer.to(memOutput));
-
-        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 dotadd,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                oDB.getGlobalWorkSize(),
+                localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(O);
+        oDB.markRWMatrixAsMaster();
         return O;
     }
 
     public imatrix dotadd(imatrix O, float factor1, imatrix op1, float factor2, imatrix op2) {
-        DeviceBuffer oDB = O.getDeviceBuffer();
-        int[] oDim = oDB.getDeviceDimension();
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
         float[] factors = new float[]{factor1, factor2};
-        cl_mem memOutput = oDB.getCLReadWriteMem();
+        cl_mem memOutput = oDB.getRWMem();
 
-        cl_mem mem_op1 = GPU.uploadRMatrix(op1);
-        cl_mem mem_op2 = GPU.uploadRMatrix(op2);
+        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
 
-        clSetKernelArg(dotaddlc, 0, Sizeof.cl_int2, Pointer.to(oDim));
-        clSetKernelArg(dotaddlc, 1, Sizeof.cl_float2, Pointer.to(factors));
-        clSetKernelArg(dotaddlc, 2, Sizeof.cl_mem, Pointer.to(mem_op1));
-        clSetKernelArg(dotaddlc, 3, Sizeof.cl_mem, Pointer.to(mem_op2));
-        clSetKernelArg(dotaddlc, 4, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(dotaddlc, 0, Sizeof.cl_float2, Pointer.to(factors));
+        clSetKernelArg(dotaddlc, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(dotaddlc, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(dotaddlc, 3, Sizeof.cl_mem, Pointer.to(memOutput));
 
-        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 dotaddlc,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(O);
+        oDB.markRWMatrixAsMaster();
         return O;
     }
 
     public imatrix dotsubtract(imatrix O, imatrix op1, imatrix op2) {
-        DeviceBuffer oDB = O.getDeviceBuffer();
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
         int[] oDim = oDB.getDeviceDimension();
-        cl_mem memOutput = oDB.getCLReadWriteMem();
+        cl_mem memOutput = oDB.getRWMem();
 
-        cl_mem mem_op1 = GPU.uploadRMatrix(op1);
-        cl_mem mem_op2 = GPU.uploadRMatrix(op2);
+        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
 
-        clSetKernelArg(dotsubtract, 0, Sizeof.cl_int2, Pointer.to(oDim));
-
-        clSetKernelArg(dotsubtract, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
-        clSetKernelArg(dotsubtract, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
-        clSetKernelArg(dotsubtract, 3, Sizeof.cl_mem, Pointer.to(memOutput));
-
-        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
-        long localSize[] = new long[]{32, 32, 1};
+        clSetKernelArg(dotsubtract, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(dotsubtract, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(dotsubtract, 2, Sizeof.cl_mem, Pointer.to(memOutput));
         clEnqueueNDRangeKernel(
                 commandQueue,
                 dotsubtract,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(O);
+        oDB.markRWMatrixAsMaster();
         return O;
     }
 
     public imatrix dotmultiply(imatrix O, imatrix op1, imatrix op2) {
-        DeviceBuffer oDB = O.getDeviceBuffer();
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
         int[] oDim = oDB.getDeviceDimension();
-        cl_mem memOutput = oDB.getCLReadWriteMem();
+        cl_mem memOutput = oDB.getRWMem();
 
-        cl_mem mem_op1 = GPU.uploadRMatrix(op1);
-        cl_mem mem_op2 = GPU.uploadRMatrix(op2);
+        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
 
-        clSetKernelArg(dotmultiply, 0, Sizeof.cl_int2, Pointer.to(oDim));
-        clSetKernelArg(dotmultiply, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
-        clSetKernelArg(dotmultiply, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
-        clSetKernelArg(dotmultiply, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(dotmultiply, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(dotmultiply, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(dotmultiply, 2, Sizeof.cl_mem, Pointer.to(memOutput));
 
-        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 dotmultiply,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(O);
+        oDB.markRWMatrixAsMaster();
         return O;
     }
-
 }

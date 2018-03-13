@@ -40,4 +40,9 @@ public class QuadraticCostFunction implements CostFunction {
     public void calculateDerivedCost(imatrix deltas, imatrix x, imatrix y) {
         fmatrix.dotsubtract(deltas, x, y);
     }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof QuadraticCostFunction;
+    }
 }

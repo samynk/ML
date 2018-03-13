@@ -7,6 +7,7 @@ package dae.neuralnet;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
+import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.cost.CostFunction;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -27,6 +28,7 @@ import javax.imageio.ImageIO;
 public class PoolLayer implements ILayer {
 
     private String name;
+    private int scaleX, scaleY;
 
     private final fmatrix inputs;
     /**
@@ -45,11 +47,23 @@ public class PoolLayer implements ILayer {
     private final fmatrix errors;
 
     public PoolLayer(int iWidth, int iHeight, int iSlices, int scaleX, int scaleY) {
+        this.scaleX = scaleX;
+        this.scaleY = scaleY;
         inputs = new fmatrix(iHeight, iWidth, iSlices);
         maskLayer = new intmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
         outputs = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
         deltas = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
         errors = new fmatrix(1, deltas.getSize());
+    }
+
+    /**
+     * Returns the activation function for this layer.
+     *
+     * @return the activation function.
+     */
+    @Override
+    public ActivationFunction getActivationFunction() {
+        return ActivationFunction.IDENTITY;
     }
 
     /**
@@ -80,6 +94,26 @@ public class PoolLayer implements ILayer {
     @Override
     public int getNrOfOutputs() {
         return outputs.getSize();
+    }
+
+    public int getNrofWInputs() {
+        return inputs.getNrOfColumns();
+    }
+
+    public int getNrOfHInputs() {
+        return inputs.getNrOfRows();
+    }
+
+    public int getNrOfSInputs() {
+        return inputs.getNrOfSlices();
+    }
+
+    public int getScaleX() {
+        return scaleX;
+    }
+
+    public int getScaleY() {
+        return scaleY;
     }
 
     @Override
@@ -177,6 +211,11 @@ public class PoolLayer implements ILayer {
         } catch (IOException ex) {
             Logger.getLogger(Layer.class.getName()).log(Level.SEVERE, null, ex);
         }
+    }
+
+    @Override
+    public void analyzeWeights() {
+        System.out.println("No weights to analyze " + this.getName());
     }
 
 }

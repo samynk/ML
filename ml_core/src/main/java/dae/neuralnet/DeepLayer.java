@@ -4,6 +4,9 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.neuralnet.cost.CostFunction;
 import dae.neuralnet.cost.QuadraticCostFunction;
+import dae.neuralnet.io.DeepLayerMetaData;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Random;
 
@@ -13,10 +16,20 @@ import java.util.Random;
  */
 public class DeepLayer {
 
-    private final ILayer[] layers;
+    private ILayer[] layers;
     private boolean validNetwork;
-    private final LearningRate learningRate;
+    private LearningRate learningRate;
     private CostFunction costFunction = new QuadraticCostFunction();
+
+    private DeepLayerMetaData metadata = new DeepLayerMetaData();
+
+    /**
+     * Creates an empty DeepLayer object.
+     *
+     */
+    public DeepLayer() {
+
+    }
 
     /**
      * Creates a new deep layer neural network with the given inputs and outputs
@@ -29,6 +42,10 @@ public class DeepLayer {
         this.learningRate = lr;
         this.layers = layers;
         validNetwork = true;
+        checkLayers();
+    }
+
+    private void checkLayers() throws IllegalArgumentException {
         for (int i = 0; i < (layers.length - 1); ++i) {
             ILayer current = layers[i];
             ILayer next = layers[i + 1];
@@ -41,6 +58,39 @@ public class DeepLayer {
     }
 
     /**
+     * Returns the layers in this DeepLayer object.
+     *
+     * @return the layers of this neural network.
+     */
+    public Iterable<ILayer> getLayers() {
+        return Arrays.asList(this.layers);
+    }
+
+    public void setLayers(ArrayList<ILayer> layers) {
+        this.layers = new ILayer[layers.size()];
+        layers.toArray(this.layers);
+        checkLayers();
+    }
+
+    /**
+     * Sets the learning rate for this deep layer.
+     *
+     * @param lr the learning rate.
+     */
+    public void setLearningRate(LearningRate lr) {
+        this.learningRate = lr;
+    }
+
+    /**
+     * Returns the learning rate of the deep layer.
+     *
+     * @return the learning rate.
+     */
+    public LearningRate getLearningRate() {
+        return this.learningRate;
+    }
+
+    /**
      * Sets the cost function of this layer. This cost function will also
      * calculate the initial deltas that will be used for back propagation. The
      * cost function should only be used on the final layer.
@@ -49,6 +99,15 @@ public class DeepLayer {
      */
     public void setCostFunction(CostFunction function) {
         this.costFunction = function;
+    }
+
+    /**
+     * Returns the cost function of this deep layer.
+     *
+     * @return the cost function.
+     */
+    public CostFunction getCostFunction() {
+        return costFunction;
     }
 
     /**
@@ -89,6 +148,18 @@ public class DeepLayer {
      */
     public ILayer getLastLayer() {
         return layers[layers.length - 1];
+    }
+
+    public ILayer getLayer(int index) {
+        if (index < layers.length && index >= 0) {
+            return layers[index];
+        } else {
+            return null;
+        }
+    }
+
+    public int getNrOfLayers() {
+        return layers.length;
     }
 
     /**
@@ -193,4 +264,19 @@ public class DeepLayer {
             ++layerIndex;
         }
     }
+
+    public void setMetaData(DeepLayerMetaData dlmd) {
+        this.metadata = dlmd;
+    }
+
+    public DeepLayerMetaData getMetaData() {
+        return metadata;
+    }
+
+    public void analyzeWeights() {
+        for (ILayer l:this.layers){
+            l.analyzeWeights();
+        }
+    }
+
 }

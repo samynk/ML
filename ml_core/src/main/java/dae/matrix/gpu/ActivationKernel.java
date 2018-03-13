@@ -4,6 +4,7 @@
  */
 package dae.matrix.gpu;
 
+import dae.matrix.BufferSyncState;
 import dae.matrix.imatrix;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
 import static org.jocl.CL.clSetKernelArg;
@@ -24,6 +25,8 @@ public class ActivationKernel extends OpenCLKernel {
     private cl_kernel sigmoid;
     private cl_kernel dsigmoid;
 
+    private long[] localWorkSize = new long[]{32};
+
     /**
      * Creates a new convolution kernel.
      *
@@ -41,26 +44,22 @@ public class ActivationKernel extends OpenCLKernel {
     }
 
     public void sigmoid(imatrix O) {
-        int[] oDim = O.getDeviceBuffer().getDeviceDimension();
+        FloatDeviceBuffer db = O.getDeviceBuffer();
         cl_mem memOutput = GPU.uploadRWMatrix(O);
-
         clSetKernelArg(sigmoid, 0, Sizeof.cl_mem, Pointer.to(memOutput));
-        clSetKernelArg(sigmoid, 1, Sizeof.cl_int2, Pointer.to(oDim));
 
-        long globalSize[] = new long[]{oDim[0], oDim[1], O.getNrOfSlices()};
-        long localSize[] = new long[]{32, 32, 1};
         clEnqueueNDRangeKernel(
                 commandQueue,
                 sigmoid,
-                3,
+                1,
                 null,
-                globalSize,
-                localSize,
+                db.getGlobalWorkSize(),
+                this.localWorkSize,
                 0,
                 null,
                 null);
 
-        GPU.downloadRWMatrix(O);
+        db.markRWMatrixAsMaster();
     }
 
     public void dsigmoid(imatrix O) {

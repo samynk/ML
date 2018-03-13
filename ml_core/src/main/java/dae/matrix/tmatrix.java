@@ -1,10 +1,8 @@
 package dae.matrix;
 
-import dae.matrix.gpu.DeviceBuffer;
+import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
-import org.jocl.Pointer;
-import org.jocl.cl_mem;
 
 /**
  * A matrix that offers a transposed view on another matrix.
@@ -19,7 +17,17 @@ public class tmatrix implements imatrix {
     public tmatrix(imatrix source) {
         this.source = source;
     }
-    
+
+    /**
+     * Returns a name for the matrix object.
+     *
+     * @return the name of the matrix object.
+     */
+    @Override
+    public String getName() {
+        return source.getName() + "t";
+    }
+
     /**
      * Checks if this matrix is a row vector.
      *
@@ -42,6 +50,11 @@ public class tmatrix implements imatrix {
     @Override
     public void set(int row, int column, int slice, float value) {
         source.set(column, row, slice, value);
+    }
+
+    @Override
+    public void set(int row, int column, int slice, int hyperslice, float value) {
+        source.set(column, row, hyperslice, slice, value);
     }
 
     @Override
@@ -88,6 +101,20 @@ public class tmatrix implements imatrix {
         return source.get(column, row, slice);
     }
 
+    /**
+     * Gets the value of a cell.
+     *
+     * @param row the row of the cell.
+     * @param column the column of the cell.
+     * @param slice the slice of the cell.
+     * @param hyperslice the hyperslice of the cell.
+     * @return the value of the cell.
+     */
+    @Override
+    public float get(int row, int column, int slice, int hyperslice) {
+        return source.get(column, row, slice, hyperslice);
+    }
+
     @Override
     public int getNrOfRows() {
         return source.getNrOfColumns();
@@ -101,6 +128,11 @@ public class tmatrix implements imatrix {
     @Override
     public int getNrOfSlices() {
         return source.getNrOfSlices();
+    }
+
+    @Override
+    public int getNrOfHyperSlices() {
+        return source.getNrOfHyperSlices();
     }
 
     @Override
@@ -147,15 +179,24 @@ public class tmatrix implements imatrix {
     public FloatBuffer getHostData() {
         return source.getHostData();
     }
-    
+
     /**
      * Returns the DeviceBuffer object.
+     *
      * @return the DeviceBuffer object.
      */
-    public DeviceBuffer getDeviceBuffer(){
+    @Override
+    public FloatDeviceBuffer getDeviceBuffer() {
         return source.getDeviceBuffer();
     }
     
+    /**
+     * Synchronizes the host buffer with the device buffer if necessary.
+     */
+    @Override
+    public void sync(){
+        source.sync();
+    }
 
     /**
      * Checks if this is a transposed view on the source data.
@@ -190,5 +231,4 @@ public class tmatrix implements imatrix {
         return new tmatrix(source.copy());
     }
 
-    
 }

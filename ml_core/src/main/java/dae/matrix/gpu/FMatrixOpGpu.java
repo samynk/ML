@@ -41,12 +41,12 @@ public class FMatrixOpGpu implements FMatrixOp {
         int K = B.getNrOfRows();
         int N = C.getNrOfColumns();
 
-        DeviceBuffer ADB = A.getDeviceBuffer();
-        DeviceBuffer BDB = B.getDeviceBuffer();
-        DeviceBuffer CDB = C.getDeviceBuffer();
-        cl_mem memA = ADB.getCLReadMem();
-        cl_mem memB = BDB.getCLReadMem();
-        cl_mem memC = CDB.getCLReadWriteMem();
+        FloatDeviceBuffer ADB = A.getDeviceBuffer();
+        FloatDeviceBuffer BDB = B.getDeviceBuffer();
+        FloatDeviceBuffer CDB = C.getDeviceBuffer();
+        cl_mem memA = ADB.getRMem();
+        cl_mem memB = BDB.getRMem();
+        cl_mem memC = CDB.getRWMem();
 
         // Copy the host data to the device
         clEnqueueWriteBuffer(GPU.CL_COMMAND_QUEUE, memA, CL_TRUE, 0, M * K
@@ -184,6 +184,21 @@ public class FMatrixOpGpu implements FMatrixOp {
         GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, output);
     }
 
+    @Override
+    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix functions) {
+
+        for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
+            float iv = input.get(0, ic);
+            for (int oc = 0; oc < a.getNrOfColumns(); ++oc) {
+                float av = a.get(ic, oc);
+                float bv = b.get(ic, oc);
+
+                float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
+                functions.set(ic, oc, v);
+            }
+        }
+    }
+
     /**
      * Calculates the derivative of the sigmoid activation function. The result
      * is stored back into the given matrix.
@@ -249,22 +264,33 @@ public class FMatrixOpGpu implements FMatrixOp {
         return GPU.KERNEL_MATRIX_OP.dotmultiply(result, op1, op2);
     }
 
+    /**
+     * Copies one matrix into another matrix. The number of rows,columns slices
+     * and hyperslices copied is the minimum of the corresponding dimensions of
+     * both matrices.
+     *
+     * @param toCopy the matrix to copy.
+     * @param dest the destination matrix.
+     */
+    @Override
+    public void copyInto(imatrix toCopy, imatrix dest) {
+        GPU.enqueueCopyMatrix(toCopy, dest);
+    }
+
     public static void cleanup() {
         clReleaseCommandQueue(GPU.CL_COMMAND_QUEUE);
         clReleaseContext(GPU.CL_CONTEXT);
     }
 
-    public static cl_mem createReadMem(imatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_ONLY,
-                (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
-                * Sizeof.cl_float, null, null);
-        return mem;
-    }
 
-    public static cl_mem createReadWriteMem(imatrix matrix, int padcol, int padrow) {
-        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, CL_MEM_READ_WRITE,
-                (matrix.getNrOfRows() + padrow) * (matrix.getNrOfColumns() + padcol) * matrix.getNrOfSlices()
-                * Sizeof.cl_float, null, null);
+    public static cl_mem createMem(imatrix cpuBuffer, int padding, long mode) {
+        int zp = cpuBuffer.getZeroPadding();
+        int totalSize = (cpuBuffer.getNrOfRows() + 2 * zp)
+                * (cpuBuffer.getNrOfColumns() + 2 * zp)
+                * cpuBuffer.getNrOfSlices()
+                * cpuBuffer.getNrOfHyperSlices() + padding;
+        cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, mode,
+                totalSize * Sizeof.cl_float, null, null);
         return mem;
     }
 }

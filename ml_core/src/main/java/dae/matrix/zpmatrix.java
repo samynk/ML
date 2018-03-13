@@ -4,11 +4,9 @@
  */
 package dae.matrix;
 
-import dae.matrix.gpu.DeviceBuffer;
-import dae.matrix.gpu.FMatrixOpGpu;
+import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
-import org.jocl.Pointer;
 import org.jocl.cl_mem;
 
 /**
@@ -23,9 +21,6 @@ public class zpmatrix implements imatrix {
     private final imatrix source;
     private final int zeroPadding;
 
-    private cl_mem rMem;
-    private cl_mem rwMem;
-
     private final int[] padding = new int[2];
 
     public zpmatrix(imatrix source, int zp) {
@@ -33,6 +28,16 @@ public class zpmatrix implements imatrix {
         this.zeroPadding = zp;
         padding[0] = 2 * zeroPadding + 32 - ((source.getNrOfColumns() + 2 * zeroPadding) % 32);
         padding[1] = 2 * zeroPadding + 32 - ((source.getNrOfRows() + 2 * zeroPadding) % 32);
+    }
+
+    /**
+     * Returns a name for the matrix object.
+     *
+     * @return the name of the matrix object.
+     */
+    @Override
+    public String getName() {
+        return "zp_" + source.getName();
     }
 
     @Override
@@ -48,6 +53,11 @@ public class zpmatrix implements imatrix {
     @Override
     public void set(int row, int column, int slice, float value) {
         source.set(row, column, slice, value);
+    }
+
+    @Override
+    public void set(int row, int column, int slice, int hyperslice, float value) {
+        source.set(row, column, slice, hyperslice, value);
     }
 
     @Override
@@ -91,6 +101,11 @@ public class zpmatrix implements imatrix {
     }
 
     @Override
+    public float get(int row, int column, int slice, int hyperslice) {
+        return source.get(row, column, slice, hyperslice);
+    }
+
+    @Override
     public int getNrOfRows() {
         return source.getNrOfRows();
     }
@@ -103,6 +118,11 @@ public class zpmatrix implements imatrix {
     @Override
     public int getNrOfSlices() {
         return source.getNrOfSlices();
+    }
+
+    @Override
+    public int getNrOfHyperSlices() {
+        return source.getNrOfHyperSlices();
     }
 
     @Override
@@ -171,8 +191,16 @@ public class zpmatrix implements imatrix {
      * @return the DeviceBuffer object.
      */
     @Override
-    public DeviceBuffer getDeviceBuffer() {
+    public FloatDeviceBuffer getDeviceBuffer() {
         return source.getDeviceBuffer();
+    }
+    
+    /**
+     * Synchronizes the host buffer with the device buffer if necessary.
+     */
+    @Override
+    public void sync(){
+        source.sync();
     }
 
     @Override

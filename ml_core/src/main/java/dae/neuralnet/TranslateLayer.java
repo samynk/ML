@@ -2,6 +2,8 @@ package dae.neuralnet;
 
 import dae.matrix.fmatrix;
 import dae.neuralnet.activation.ActivationFunction;
+import dae.neuralnet.analysis.WeightAnalysis;
+import dae.neuralnet.analysis.WeightAnalyzer;
 import java.util.Random;
 
 /**
@@ -88,5 +90,12 @@ public class TranslateLayer extends AbstractLayer {
 
     @Override
     public void writeOutputImage(String file) {
+    }
+
+    @Override
+    public void analyzeWeights() {
+        WeightAnalysis wa1 = WeightAnalyzer.analyzeMatrix(this.weights);
+        System.out.println("weight analysis of " + getName() + " weights");
+        System.out.println(wa1);
     }
 }

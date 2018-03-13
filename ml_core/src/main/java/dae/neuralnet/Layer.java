@@ -4,17 +4,11 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
-import dae.neuralnet.cost.CostFunction;
+import dae.neuralnet.analysis.WeightAnalysis;
+import dae.neuralnet.analysis.WeightAnalyzer;
 import dae.neuralnet.matrix.MatrixFactory;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Random;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.imageio.ImageIO;
 
 /**
  * The neural network layer is the basic interface that defines the
@@ -28,16 +22,15 @@ import javax.imageio.ImageIO;
  * @author Koen Samyn
  */
 public class Layer extends AbstractLayer {
-    
+
     private final imatrix weights;
-    
     private final imatrix tweights;
-    
+
     private imatrix constraint;
-    
+
     private final imatrix deltaWeights;
     private final imatrix batchDeltaWeights;
-    
+
     private float dropRate = 0;
     private boolean dropRateSet = false;
     private Random dropRandom;
@@ -65,7 +58,7 @@ public class Layer extends AbstractLayer {
      * @param af the activation function
      */
     public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, ActivationFunction af) {
-        this(nrOfInputs, nrOfBiases, nrOfOutputs, 1, af, MatrixFactory.DEFAULT);
+        this(nrOfInputs, nrOfBiases, nrOfOutputs, 1, af);
     }
 
     /**
@@ -90,7 +83,7 @@ public class Layer extends AbstractLayer {
      * @param af the activation function
      */
     public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af) {
-        this(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af, MatrixFactory.DEFAULT);
+        this(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af, new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs));
     }
 
     /**
@@ -98,29 +91,29 @@ public class Layer extends AbstractLayer {
      *
      * The number of inputs n is defined as: nrOfInputs+nrOfBiases.
      *
-     * The input matrix is then defined as an (1 x n) matrix. The bias values
-     * will be set to one.
+     * The input matrix is then defined as an (batchSize x n) matrix. The bias
+     * values will be set to one.
      *
      * The number of outputs m is equal to the nrOfOutputs parameter.
      *
      * The weight matrix is thus defined as an (n x m) matrix.
      *
-     * Multiplication of the (1xn) matrix with the (n x m) matrix leads to an
-     * output matrix with dimension (1 x m).
+     * Multiplication of the (batchSizexn) matrix with the (n x m) matrix leads
+     * to an output matrix with dimension (batchSize x m).
      *
      * @param nrOfInputs the number of inputs of this layer.
      * @param nrOfBiases the number of biases of this layer.
      * @param nrOfOutputs the number of outputs of this layer.
-     * @param batchSize the batch size for this layer.
+     * @param batchSize the batch size
      * @param af the activation function
-     * @param weightMatrixFactory the factory class that creates matrices.
+     * @param weights the weights to initialize the Layer with.
      */
-    public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af, MatrixFactory weightMatrixFactory) {
+    public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af, imatrix weights) {
         super(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af);
-        this.weights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
+        this.weights = weights;
         this.tweights = new tmatrix(weights);
-        this.deltaWeights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
-        this.batchDeltaWeights = weightMatrixFactory.create(nrOfInputs, nrOfBiases, nrOfOutputs);
+        this.deltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
+        this.batchDeltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
     }
 
     /**
@@ -135,6 +128,14 @@ public class Layer extends AbstractLayer {
         this.constraint = new fmatrix(getNrOfInputs() + getNrOfBiases(), getNrOfOutputs());
         this.dropWeightMatrix = new fmatrix(getNrOfInputs() + getNrOfBiases(), getNrOfOutputs());
         this.tDropWeightMatrix = new tmatrix(dropWeightMatrix);
+    }
+
+    public boolean isDropRateSet() {
+        return dropRateSet;
+    }
+
+    public float getDropRate() {
+        return dropRate;
     }
 
     /**
@@ -177,19 +178,19 @@ public class Layer extends AbstractLayer {
             fmatrix.dotmultiply(dropWeightMatrix, constraint, weights);
             weightMatrix = dropWeightMatrix;
         }
-        
+
         fmatrix.sgemm(1, inputs, weightMatrix, 0, outputs);
-        
+
         switch (function) {
             case SOFTMAX:
                 fmatrix.softMaxPerRow(outputs);
                 break;
-            
+
             default:
                 outputs.applyFunction(this.activation);
         }
     }
-    
+
     @Override
     public void calculateNewWeights(float learningRate) {
 //        // 4.a Multiply the transposes inputs with the deltas.
@@ -225,7 +226,7 @@ public class Layer extends AbstractLayer {
         fmatrix.sgemm(1, this.deltas, t, 0, errors);
         //fmatrix.multiply(deltas, this.deltas, this.tweights);
     }
-    
+
     @Override
     public void adaptWeights(float factor) {
         fmatrix.dotadd(weights, 1, weights, factor, batchDeltaWeights);
@@ -243,43 +244,27 @@ public class Layer extends AbstractLayer {
     public void randomizeWeights(Random r, float min, float max) {
         weights.applyFunction(x -> min + r.nextFloat() * (max - min));
     }
-    
+
     public void printInputs() {
         System.out.println(inputs.toString());
     }
-    
+
     @Override
     public void writeWeightImage(String file) {
-        float max = weights.max().value;
-        float min = weights.min().value;
-        
-        float factor = 255f / (max - min);
-        System.out.println("factor: " + factor);
-        
-        imatrix weightCopy = weights.copy();
-        weightCopy.applyFunction(x -> (x - min) * factor);
-        
-        BufferedImage bi = new BufferedImage(weights.getNrOfColumns(), weights.getNrOfRows(), BufferedImage.TYPE_BYTE_GRAY);
-        for (int r = 0; r < weightCopy.getNrOfRows(); ++r) {
-            for (int c = 0; c < weightCopy.getNrOfColumns(); ++c) {
-                float p = weightCopy.get(r, c);
-                int pi = (int) Math.round(p);
-                bi.setRGB(c, r, (pi << 16) + (pi << 8) + pi);
-            }
-        }
-        
-        String homeDir = System.getProperty("user.home");
-        Path exportPath = Paths.get(homeDir, ".nn", file + ".png");
-        try {
-            Files.createDirectories(exportPath);
-            ImageIO.write(bi, "png", exportPath.toFile());
-        } catch (IOException ex) {
-            Logger.getLogger(Layer.class.getName()).log(Level.SEVERE, null, ex);
-        }
+        fmatrix.writeAs2DImage(weights, Paths.get(file));
     }
-    
+
     @Override
     public void writeOutputImage(String file) {
-        
+
     }
+    
+    
+    @Override
+    public void analyzeWeights() {
+        WeightAnalysis wa1 = WeightAnalyzer.analyzeMatrix(this.weights);
+        System.out.println("weight analysis of " + getName() + " weights");
+        System.out.println(wa1);
+    }
+
 }

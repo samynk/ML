@@ -26,5 +26,10 @@ public class CrossEntropyCostFunction implements CostFunction {
             deltas.set(0, column, value);
         }
     }
+    
+    @Override
+    public boolean equals(Object other){
+        return other instanceof CrossEntropyCostFunction;
+    }
 
 }

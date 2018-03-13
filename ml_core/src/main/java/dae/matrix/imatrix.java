@@ -1,16 +1,21 @@
 package dae.matrix;
 
-import dae.matrix.gpu.DeviceBuffer;
+import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
-import org.jocl.Pointer;
-import org.jocl.cl_mem;
 
 /**
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public interface imatrix {
+
+    /**
+     * Returns a name for the matrix object.
+     *
+     * @return the name of the matrix object.
+     */
+    public String getName();
 
     /**
      * Checks if this matrix is a row vector.
@@ -37,6 +42,17 @@ public interface imatrix {
      * @param value the new value for the cell.
      */
     public void set(int row, int column, int slice, float value);
+
+    /**
+     * Sets a cell in this matrix to the given value.
+     *
+     * @param row the row to set.
+     * @param column the column to set.
+     * @param slice the slice to set.
+     * @param hyperslice the slice to set.
+     * @param value the new value for the cell.
+     */
+    public void set(int row, int column, int slice, int hyperslice, float value);
 
     /**
      * Sets a row in the matrix to the given values.
@@ -108,6 +124,17 @@ public interface imatrix {
     public float get(int row, int column, int slice);
 
     /**
+     * Gets the value of a cell.
+     *
+     * @param row the row of the cell.
+     * @param column the column of the cell.
+     * @param slice the slice of the cell.
+     * @param hyperslice the hyperslice of the cell.
+     * @return the value of the cell.
+     */
+    public float get(int row, int column, int slice, int hyperslice);
+
+    /**
      * Returns the number of rows.
      *
      * @return the number of rows.
@@ -127,6 +154,13 @@ public interface imatrix {
      * @return the number of slices.
      */
     public int getNrOfSlices();
+
+    /**
+     * Returns the number of hyperslices in the matrix.
+     *
+     * @return the number of slices.
+     */
+    public int getNrOfHyperSlices();
 
     /**
      * Returns the total number of cells in this matrix in a single slice.
@@ -223,8 +257,14 @@ public interface imatrix {
 
     /**
      * Returns the DeviceBuffer object.
+     *
      * @return the DeviceBuffer object.
      */
-    public DeviceBuffer getDeviceBuffer();
+    public FloatDeviceBuffer getDeviceBuffer();
+    
+    /**
+     * Synchronizes the host buffer with the device buffer if necessary.
+     */
+    public void sync();
 
 }

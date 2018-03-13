@@ -20,9 +20,9 @@ import org.junit.Test;
 public class TestDigitRecognition1 {
 
     private static final int TEST_ITERATIONS = 100;
-    private static final int TRAIN_ITERATIONS = 20000;
+    private static final int TRAIN_ITERATIONS = 500;
     private static final int BATCH_SIZE = 50;
-    private static final float LEARNING_RATE = 0.1f;
+    private static final float LEARNING_RATE = 0.001f;
 
     public TestDigitRecognition1() {
     }
@@ -147,7 +147,7 @@ public class TestDigitRecognition1 {
         AbstractLayer l5 = new Layer(50, 0, 25, BATCH_SIZE, ActivationFunction.SIGMOID);
         AbstractLayer l6 = new Layer(25, 0, 10, BATCH_SIZE, ActivationFunction.SOFTMAX);
 
-        LearningRate lrd = new LearningRateDecay(.2f, .0001f);
+        LearningRate lrd = new LearningRateDecay(LEARNING_RATE, .0001f);
         DeepLayer dl = new DeepLayer(lrd, l1, l2, l3, l4, l5, l6);
 
         Random r = new Random(System.currentTimeMillis());

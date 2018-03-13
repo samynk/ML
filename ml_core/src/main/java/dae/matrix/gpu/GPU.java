@@ -8,6 +8,9 @@ import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.jocl.CL;
 import static org.jocl.CL.CL_CONTEXT_PLATFORM;
 import static org.jocl.CL.CL_DEVICE_MAX_WORK_ITEM_SIZES;
@@ -16,6 +19,8 @@ import static org.jocl.CL.CL_DEVICE_TYPE_ALL;
 import static org.jocl.CL.CL_TRUE;
 import static org.jocl.CL.clCreateCommandQueue;
 import static org.jocl.CL.clCreateContext;
+import static org.jocl.CL.clEnqueueCopyBuffer;
+import static org.jocl.CL.clEnqueueCopyBufferRect;
 import static org.jocl.CL.clEnqueueFillBuffer;
 import static org.jocl.CL.clEnqueueReadBufferRect;
 import static org.jocl.CL.clEnqueueWriteBufferRect;
@@ -46,6 +51,7 @@ public class GPU {
     public static final MatrixOpKernel KERNEL_MATRIX_OP;
 
     private static final long maxWorkItemSizes[];
+
 
     static {
         // The platform, device type and device number
@@ -100,9 +106,9 @@ public class GPU {
 
         KERNEL_POOL = new PoolKernel();
         KERNEL_POOL.init(CL_CONTEXT, CL_COMMAND_QUEUE);
-        
+
         KERNEL_MATRIX_OP = new MatrixOpKernel();
-        KERNEL_MATRIX_OP.init(CL_CONTEXT,CL_COMMAND_QUEUE);
+        KERNEL_MATRIX_OP.init(CL_CONTEXT, CL_COMMAND_QUEUE);
 
         // CL_DEVICE_MAX_WORK_ITEM_SIZES
         maxWorkItemSizes = getSizes(device, CL_DEVICE_MAX_WORK_ITEM_SIZES, 3);
@@ -163,22 +169,18 @@ public class GPU {
     }
 
     public static final void zeroFillR(imatrix m) {
-        DeviceBuffer mDB = m.getDeviceBuffer();
-        int deviceRows = mDB.getDeviceRows();
-        int deviceCols = mDB.getDeviceColumns();
-        zeroFill(mDB.getCLReadMem(), deviceRows * deviceCols * m.getNrOfSlices());
+        FloatDeviceBuffer mDB = m.getDeviceBuffer();
+        zeroFill(mDB.getRMem(), mDB.getDeviceSize());
     }
 
     public static final void zeroFillRW(imatrix m) {
-        DeviceBuffer mDB = m.getDeviceBuffer();
-        int deviceRows = mDB.getDeviceRows();
-        int deviceCols = mDB.getDeviceColumns();
-        zeroFill(mDB.getCLReadWriteMem(), deviceRows * deviceCols * m.getNrOfSlices());
+        FloatDeviceBuffer mDB = m.getDeviceBuffer();
+        zeroFill(mDB.getRWMem(), mDB.getDeviceSize());
     }
 
     private static void zeroFill(cl_mem buffer, int size) {
         float zero[] = new float[1];
-        clEnqueueFillBuffer(CL_COMMAND_QUEUE, buffer, Pointer.to(zero), Float.BYTES, 0, size * Float.BYTES, 0, null, null);
+        clEnqueueFillBuffer(CL_COMMAND_QUEUE, buffer, Pointer.to(zero), Float.BYTES, 0, size, 0, null, null);
     }
 
     /**
@@ -189,7 +191,8 @@ public class GPU {
      * @return the buffer object that is associated with the device buffer.
      */
     public static final cl_mem uploadRMatrix(imatrix m) {
-        cl_mem buffer = m.getDeviceBuffer().getCLReadMem();
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read only matrix {0} to gpu.", m.getName());
+        cl_mem buffer = m.getDeviceBuffer().getRMem();
         enqueueWriteMatrix(m, buffer);
         return buffer;
     }
@@ -202,7 +205,36 @@ public class GPU {
      * @return the buffer object that is associated with the device buffer.
      */
     public static final cl_mem uploadRWMatrix(imatrix m) {
-        cl_mem buffer = m.getDeviceBuffer().getCLReadWriteMem();
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read write matrix {0} to gpu.", m.getName());
+        cl_mem buffer = m.getDeviceBuffer().getRWMem();
+        enqueueWriteMatrix(m, buffer);
+        return buffer;
+    }
+    
+        /**
+     * Writes to a buffer object on the device that is defined as a read only
+     * buffer on the device.
+     *
+     * @param m the matrix to upload into the device.
+     * @return the buffer object that is associated with the device buffer.
+     */
+    public static final cl_mem uploadRMatrix(intmatrix m) {
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read only matrix {0} to gpu.", m.getName());
+        cl_mem buffer = m.getDeviceBuffer().getRMem();
+        enqueueWriteMatrix(m, buffer);
+        return buffer;
+    }
+
+    /**
+     * Writes to a buffer object on the device that is defined as a read/write
+     * buffer on the device.
+     *
+     * @param m the matrix to upload into the device.
+     * @return the buffer object that is associated with the device buffer.
+     */
+    public static final cl_mem uploadRWMatrix(intmatrix m) {
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read write matrix {0} to gpu.", m.getName());
+        cl_mem buffer = m.getDeviceBuffer().getRWMem();
         enqueueWriteMatrix(m, buffer);
         return buffer;
     }
@@ -216,20 +248,35 @@ public class GPU {
      * @return
      */
     private static void enqueueWriteMatrix(imatrix m, cl_mem deviceBuffer) {
-        DeviceBuffer mdb = m.getDeviceBuffer();
-        int deviceCols = mdb.getDeviceColumns();
-        int deviceRows = mdb.getDeviceRows();
-
-        long region[] = new long[]{m.getNrOfRows() * Float.BYTES, m.getNrOfColumns(), m.getNrOfSlices()};
-        long hostOffset[] = new long[]{m.getZeroPadding() * Float.BYTES, m.getZeroPadding(), 0};
+        FloatDeviceBuffer mdb = m.getDeviceBuffer();
         clEnqueueWriteBufferRect(CL_COMMAND_QUEUE, deviceBuffer, CL_TRUE,
-                hostOffset,
-                new long[]{0, 0, 0},
-                region,
-                // device
-                deviceRows * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
-                // host
-                m.getNrOfRows() * Float.BYTES, m.getSliceSize() * Float.BYTES,
+                mdb.getDeviceOffset(),
+                mdb.getHostOffset(),
+                mdb.getHostRegion(),
+                mdb.getDeviceRowPitch(), mdb.getDeviceSlicePitch(),
+                mdb.getHostRowPitch(), mdb.getHostSlicePitch(),
+                mdb.getCLPointer(),
+                0,
+                null,
+                null);
+    }
+    
+     /**
+     * Writes the matrix m into the provided device buffer on the device.
+     *
+     * @param m the matrix m to upload into the device.
+     * @param deviceBuffer the buffer object that is associated with the buffer
+     * on the device.
+     * @return
+     */
+    private static void enqueueWriteMatrix(intmatrix m, cl_mem deviceBuffer) {
+        IntDeviceBuffer mdb = m.getDeviceBuffer();
+        clEnqueueWriteBufferRect(CL_COMMAND_QUEUE, deviceBuffer, CL_TRUE,
+                mdb.getDeviceOffset(),
+                mdb.getHostOffset(),
+                mdb.getHostRegion(),
+                mdb.getDeviceRowPitch(), mdb.getDeviceSlicePitch(),
+                mdb.getHostRowPitch(), mdb.getHostSlicePitch(),
                 mdb.getCLPointer(),
                 0,
                 null,
@@ -243,7 +290,8 @@ public class GPU {
      * @param m the padded matrix to download from the device
      */
     public static final void downloadRMatrix(imatrix m) {
-        cl_mem memOutput = m.getDeviceBuffer().getCLReadMem();
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Downloading read only matrix {0} from gpu.", m.getName());
+        cl_mem memOutput = m.getDeviceBuffer().getRMem();
         enqueueReadMatrix(m, memOutput);
     }
 
@@ -254,7 +302,8 @@ public class GPU {
      * @param m the padded matrix to download from the device
      */
     public static final void downloadRWMatrix(imatrix m) {
-        cl_mem memOutput = m.getDeviceBuffer().getCLReadWriteMem();
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Downloading read write matrix {0} from gpu.", m.getName());
+        cl_mem memOutput = m.getDeviceBuffer().getRWMem();
         enqueueReadMatrix(m, memOutput);
     }
 
@@ -265,7 +314,7 @@ public class GPU {
      * @param m the padded matrix to download from the device
      */
     public static final void downloadRMatrix(intmatrix m) {
-        cl_mem memOutput = m.getCLReadMem();
+        cl_mem memOutput = m.getDeviceBuffer().getRMem();
         enqueueReadMatrix(m, memOutput);
     }
 
@@ -276,7 +325,7 @@ public class GPU {
      * @param m the padded matrix to download from the device
      */
     public static final void downloadRWMatrix(intmatrix m) {
-        cl_mem memOutput = m.getCLReadWriteMem();
+        cl_mem memOutput = m.getDeviceBuffer().getRWMem();
         enqueueReadMatrix(m, memOutput);
     }
 
@@ -287,20 +336,13 @@ public class GPU {
      * @param deviceBuffer the device buffer to read the data from.
      */
     public static void enqueueReadMatrix(imatrix m, cl_mem deviceBuffer) {
-        DeviceBuffer db = m.getDeviceBuffer();
-        int deviceCols = db.getDeviceColumns();
-        int deviceRows = db.getDeviceRows();
-
-        long region[] = new long[]{m.getNrOfRows() * Float.BYTES, m.getNrOfColumns(), m.getNrOfSlices()};
-        long bufferOffset[] = new long[]{m.getZeroPadding()*Float.BYTES, m.getZeroPadding(), 0};
+        FloatDeviceBuffer db = m.getDeviceBuffer();
         clEnqueueReadBufferRect(CL_COMMAND_QUEUE, deviceBuffer, CL_TRUE,
-                bufferOffset,
-                new long[]{0, 0, 0},
-                region,
-                // device, bufferRowPitch
-                deviceRows * Float.BYTES, deviceCols * deviceRows * Float.BYTES,
-                // host
-                m.getNrOfRows() * Float.BYTES, m.getSliceSize() * Float.BYTES,
+                db.getDeviceOffset(),
+                db.getHostOffset(),
+                db.getHostRegion(),
+                db.getDeviceRowPitch(), db.getDeviceSlicePitch(),
+                db.getHostRowPitch(), db.getHostSlicePitch(),
                 db.getCLPointer(),
                 0,
                 null,
@@ -314,21 +356,79 @@ public class GPU {
      * @param deviceBuffer the device buffer to read the data from.
      */
     private static void enqueueReadMatrix(intmatrix m, cl_mem deviceBuffer) {
-        int deviceCols = m.getDeviceColumns();
-        int deviceRows = m.getDeviceRows();
-
-        long region[] = new long[]{m.getNrOfRows() * Integer.BYTES, m.getNrOfColumns(), m.getNrOfSlices()};
+        IntDeviceBuffer db = m.getDeviceBuffer();
         clEnqueueReadBufferRect(CL_COMMAND_QUEUE, deviceBuffer, CL_TRUE,
-                new long[]{m.getZeroPadding(), m.getZeroPadding(), 0},
-                new long[]{0, 0, 0},
-                region,
-                // device
-                deviceCols * Integer.BYTES, deviceCols * deviceRows * Integer.BYTES,
-                // host
-                m.getNrOfColumns() * Integer.BYTES, m.getSliceSize() * Integer.BYTES,
-                m.getCLPointer(),
+                db.getDeviceOffset(),
+                db.getHostOffset(),
+                db.getHostRegion(),
+                db.getDeviceRowPitch(), db.getDeviceSlicePitch(),
+                db.getHostRowPitch(), db.getHostSlicePitch(),
+                db.getCLPointer(),
                 0,
                 null,
                 null);
+    }
+
+    static void copyRWBuffer(imatrix cpuBuffer) {
+        FloatDeviceBuffer db = cpuBuffer.getDeviceBuffer();
+        clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                db.getRWMem(),
+                db.getRMem(),
+                0, 0,
+                db.getDeviceSize(), 0, null, null);
+    }
+    
+    static void copyRWBuffer(intmatrix cpuBuffer){
+        IntDeviceBuffer db = cpuBuffer.getDeviceBuffer();
+        clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                db.getRWMem(),
+                db.getRMem(),
+                0, 0,
+                db.getDeviceSize(), 0, null, null);
+    }
+
+    public static void enqueueCopyMatrix(imatrix src, imatrix dst) {
+        FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
+        int srcCols = dbSrc.getDeviceColumns();
+        int srcRows = dbSrc.getDeviceRows();
+
+        FloatDeviceBuffer dbDst = dst.getDeviceBuffer();
+        int dstCols = dbDst.getDeviceColumns();
+        int dstRows = dbDst.getDeviceRows();
+
+        int numRows = Math.min(src.getNrOfRows(), dst.getNrOfRows());
+        int numCols = Math.min(src.getNrOfColumns(), dst.getNrOfColumns());
+
+        int srcSlices = src.getNrOfSlices() * src.getNrOfHyperSlices();
+        int dstSlices = dst.getNrOfSlices() * dst.getNrOfHyperSlices();
+        int numSlices = Math.min(srcSlices, dstSlices);
+
+        dbSrc.uploadRMatrix();
+        dbDst.uploadRMatrix();
+
+        long region[] = new long[]{numRows * Float.BYTES, numCols, numSlices};
+
+        if (srcCols != dstCols
+                || srcRows != dstRows
+                || srcSlices != dstSlices
+                || src.getZeroPadding() != dst.getZeroPadding()) {
+            clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                    dbSrc.getRMem(),
+                    dbDst.getRMem(),
+                    dbSrc.getDeviceOffset(),
+                    dbDst.getDeviceOffset(),
+                    region,
+                    dbSrc.getDeviceRowPitch(), dbSrc.getDeviceSlicePitch(),
+                    dbDst.getDeviceRowPitch(), dbDst.getDeviceSlicePitch(),
+                    0, null, null);
+        } else {
+            clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                    dbSrc.getRMem(),
+                    dbDst.getRMem(),
+                    0, 0,
+                    dbSrc.getDeviceSize(), 0, null, null
+            );
+        }
+        dbDst.markRMatrixAsMaster();
     }
 }

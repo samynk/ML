@@ -9,5 +9,5 @@ package dae.matrix;
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
 public enum BufferSyncState {
-    CPU,GPU;
+    UPTODATE, OUTOFDATE;
 }

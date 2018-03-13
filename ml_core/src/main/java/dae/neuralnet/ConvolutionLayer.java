@@ -4,7 +4,8 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.zpmatrix;
 import dae.neuralnet.activation.ActivationFunction;
-import dae.neuralnet.cost.CostFunction;
+import dae.neuralnet.analysis.WeightAnalysis;
+import dae.neuralnet.analysis.WeightAnalyzer;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -39,7 +40,7 @@ public class ConvolutionLayer implements ILayer {
     /**
      * The weight matrices
      */
-    private final fmatrix weights;
+    private final imatrix weights;
     /**
      * the new weights.
      */
@@ -113,8 +114,27 @@ public class ConvolutionLayer implements ILayer {
      */
     public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, ActivationFunction af) {
         // filter weights are shared.
+        this(wInputs, hInputs, sInputs, features, filter, stride, af, new fmatrix(filter, filter, features));
+    }
 
-        weights = new fmatrix(filter, filter, features);
+    /**
+     * Creates a new convolution layer. The inputs of the convolutional layer
+     * are interpreted as a 3D array of two dimensional slices.
+     *
+     * @param wInputs The number of inputs in the x direction.
+     * @param hInputs The number of inputs in the y direction.
+     * @param sInputs The number of slices in the input matrix.
+     * @param features The number of convolutional layers.
+     * @param stride the stride to slide the filter with.
+     * @param filter the size of filter. The total number of weights per
+     * convolutional layer will be filter x filter.
+     * @param af the activation function.
+     * @param weights
+     */
+    public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, ActivationFunction af, imatrix weights) {
+        // filter weights are shared.
+
+        this.weights = weights;
         newWeights = new fmatrix(filter, filter, features);
         batchWeights = new fmatrix(filter, filter, features);
 
@@ -138,6 +158,11 @@ public class ConvolutionLayer implements ILayer {
 
         derivatives = new fmatrix(oR, oC, features);
         function = af;
+    }
+
+    @Override
+    public ActivationFunction getActivationFunction() {
+        return this.function;
     }
 
     /**
@@ -172,6 +197,30 @@ public class ConvolutionLayer implements ILayer {
 
     public int getNrOfFeatures() {
         return features;
+    }
+
+    public int getNrOfWInputs() {
+        return inputs.getNrOfRows();
+    }
+
+    public int getNrOfHInputs() {
+        return inputs.getNrOfColumns();
+    }
+
+    public int getNrOfSInputs() {
+        return inputs.getNrOfSlices();
+    }
+
+    public int getFilterSize() {
+        return this.filterSize;
+    }
+
+    public int getFilterStride() {
+        return this.stride;
+    }
+
+    public imatrix getWeights() {
+        return this.weights;
     }
 
     @Override
@@ -221,34 +270,8 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public void writeWeightImage(String file) {
-        float max = weights.max().value;
-        float min = weights.min().value;
-
-        float factor = 255f / (max - min);
-        System.out.println("factor: " + factor);
-
-        imatrix weightCopy = weights.copy();
-        weightCopy.applyFunction(x -> (x - min) * factor);
-
-        BufferedImage bi = new BufferedImage(weights.getNrOfColumns(), (weights.getNrOfRows() + 5) * this.getNrOfFeatures(), BufferedImage.TYPE_BYTE_GRAY);
-        for (int slice = 0; slice < this.getNrOfFeatures(); ++slice) {
-            for (int r = 0; r < weightCopy.getNrOfRows(); ++r) {
-                for (int c = 0; c < weightCopy.getNrOfColumns(); ++c) {
-                    float p = weightCopy.get(r, c, slice);
-                    int pi = (int) Math.round(p);
-                    bi.setRGB(c, r + slice * (weights.getNrOfRows() + 5), (pi << 16) + (pi << 8) + pi);
-                }
-            }
-        }
-
-        String homeDir = System.getProperty("user.home");
-        Path exportPath = Paths.get(homeDir, ".nn", file + ".png");
-        try {
-            Files.createDirectories(exportPath);
-            ImageIO.write(bi, "png", exportPath.toFile());
-        } catch (IOException ex) {
-            Logger.getLogger(Layer.class.getName()).log(Level.SEVERE, null, ex);
-        }
+        Path p = Paths.get(file);
+        fmatrix.writeAs3DImage(weights, (int) (Math.sqrt(features * inputs.getNrOfSlices()) + 1), 5, p);
     }
 
     @Override
@@ -320,6 +343,13 @@ public class ConvolutionLayer implements ILayer {
     @Override
     public fmatrix getOutputs() {
         return outputVector;
+    }
+
+    @Override
+    public void analyzeWeights() {
+        WeightAnalysis wa = WeightAnalyzer.analyzeMatrix(this.weights);
+        System.out.println("weight analysis of " + this.name);
+        System.out.println(wa);
     }
 
 }

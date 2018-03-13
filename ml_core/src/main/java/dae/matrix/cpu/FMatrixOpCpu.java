@@ -4,10 +4,12 @@
  */
 package dae.matrix.cpu;
 
+import static dae.matrix.fmatrix.equalDimension;
 import dae.matrix.gpu.GPU;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
+import java.nio.FloatBuffer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -291,6 +293,29 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     /**
+     * Calculates a fuzzification layer.
+     *
+     * @param input the inputs to fuzzify.
+     * @param a the weights that determine the slopes of the transition.
+     * @param b the weights that determine the crossing point between two
+     * classes.
+     * @param functions the fuzzified input.
+     */
+    @Override
+    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix functions) {
+        for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
+            float iv = input.get(0, ic);
+            for (int oc = 0; oc < functions.getNrOfColumns() ; ++oc) {
+                float av = a.get(ic, oc);
+                float bv = b.get(ic, oc);
+
+                float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
+                functions.set(ic, oc, v);
+            }
+        }
+    }
+
+    /**
      * Calculates the sigmoid activation function. The result is stored back
      * into the given matrix.
      *
@@ -333,10 +358,10 @@ public class FMatrixOpCpu implements FMatrixOp {
         }
         return result;
     }
-    
+
     /**
-     * Calculates the element by element addition of 
-     * factor1 * op1 and factor2 * op2.
+     * Calculates the element by element addition of factor1 * op1 and factor2 *
+     * op2.
      *
      * @param result the matrix to store the result.
      * @param factor1 the first factor.
@@ -346,8 +371,8 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @return the result matrix
      */
     @Override
-    public imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2){
-         for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+    public imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2) {
+        for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
             for (int row = 0; row < result.getNrOfRows(); ++row) {
                 for (int column = 0; column < result.getNrOfColumns(); ++column) {
                     float op1value = op1.get(row, column, slice);
@@ -401,6 +426,46 @@ public class FMatrixOpCpu implements FMatrixOp {
             }
         }
         return result;
+    }
+
+    @Override
+    public void copyInto(imatrix toCopy, imatrix dest) {
+        if (toCopy.isTransposed() == dest.isTransposed()
+                && equalDimension(toCopy, dest)) {
+            FloatBuffer srcData = toCopy.getHostData();
+            FloatBuffer destData = dest.getHostData();
+            srcData.rewind();
+            destData.rewind();
+            destData.put(srcData);
+
+        } else {
+            int eSrcRows = toCopy.getNrOfRows();
+            int eDstRows = dest.getNrOfRows();
+
+            int eSrcCols = toCopy.getNrOfColumns();
+            int eDstCols = dest.getNrOfColumns();
+
+            int eSrcSlices = toCopy.getNrOfSlices();
+            int eDstSlices = dest.getNrOfSlices();
+
+            int eSrcHyperSlices = toCopy.getNrOfHyperSlices();
+            int eDstHyperSlices = dest.getNrOfHyperSlices();
+
+            int maxRow = Math.min(eSrcRows, eDstRows);
+            int maxCol = Math.min(eSrcCols, eDstCols);
+            int maxSlices = Math.min(eSrcSlices, eDstSlices);
+            int maxHyperSlices = Math.min(eSrcHyperSlices, eDstHyperSlices);
+            for (int hp = 0; hp < maxHyperSlices; ++hp) {
+                for (int slice = 0; slice < maxSlices; ++slice) {
+                    for (int row = 0; row < maxRow; ++row) {
+                        for (int column = 0; column < maxCol; ++column) {
+                            float value = toCopy.get(row, column, slice, hp);
+                            dest.set(row, column, slice, hp, value);
+                        }
+                    }
+                }
+            }
+        }
     }
 
 }

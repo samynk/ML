@@ -8,7 +8,6 @@ import dae.neuralnet.cost.CostFunction;
 import dae.neuralnet.cost.QuadraticCostFunction;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
-import dae.neuralnet.matrix.MatrixFactory;
 import java.util.Random;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -58,7 +57,8 @@ public class TestLayer {
 
         System.out.println(weights1);
         // biases are autmatically set to 1.
-        l1.setInputs(.05f, .10f);
+        fmatrix inputs = new fmatrix(1,2);
+        inputs.setRow(0, new float[]{.05f,.1f});
         l1.printInputs();
         l1.forward();
 
@@ -223,7 +223,7 @@ public class TestLayer {
         System.out.println(trainSetLabels.getSizeAsString());
 
         // batch size 1
-        Layer l1 = new Layer(784, 1, 784, 1, ActivationFunction.IDENTITY, MatrixFactory.TRANSLATE_MATRIX);
+        Layer l1 = new Layer(784, 1, 784, 1, ActivationFunction.IDENTITY);
         Layer l2 = new Layer(784, 1, 10, ActivationFunction.SOFTMAX);
 
         DeepLayer dl = new DeepLayer(i -> .5f, l1, l2);
@@ -474,7 +474,7 @@ public class TestLayer {
 
     public void testTranslateLayer() {
         // batch size 1
-        Layer l1 = new Layer(2, 1, 2, 1, ActivationFunction.IDENTITY, MatrixFactory.TRANSLATE_MATRIX);
+        Layer l1 = new Layer(2, 1, 2, 1, ActivationFunction.IDENTITY);
         Layer l2 = new Layer(2, 0, 2, ActivationFunction.SIGMOID);
 
         DeepLayer dl = new DeepLayer(i -> 1f, l1, l2);

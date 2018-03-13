@@ -4,8 +4,8 @@
  */
 package dae.matrix.integer;
 
+import dae.matrix.gpu.IntDeviceBuffer;
 import dae.matrix.gpu.IntMatrixOpGpu;
-import dae.matrix.imatrix;
 import java.nio.IntBuffer;
 import org.jocl.Pointer;
 import org.jocl.cl_mem;
@@ -16,30 +16,33 @@ import org.jocl.cl_mem;
  */
 public class intmatrix {
 
+    private String name = "intmatrix" + (count++);
+    private static int count = 0;
+
     private final int rows;
     private final int columns;
     private final int slices;
+    private final int hyperslices;
 
     private final int zeropadding;
 
     private final int sliceSize;
+    private final int hyperSliceSize;
     private final int size;
 
     // private float[] data;
     private final IntBuffer data;
-    private cl_mem rMem;
-    private cl_mem rwMem;
-
-    private final int[] padding = new int[2];
+    private final IntDeviceBuffer deviceBuffer;
 
     /**
-     * Creates a new intmatrix object with the given rows and columns and 1 slice.
+     * Creates a new intmatrix object with the given rows and columns and 1
+     * slice.
      *
      * @param rows the number of rows in the matrix.
      * @param columns the number of columns in the matrix.
      */
     public intmatrix(int rows, int columns) {
-        this(rows, columns, 1);
+        this(rows, columns, 1, 1, 0);
     }
 
     /**
@@ -50,7 +53,7 @@ public class intmatrix {
      * @param slices the number of slices in the matrix.
      */
     public intmatrix(int rows, int columns, int slices) {
-        this(rows, columns, slices, 0);
+        this(rows, columns, slices, 1, 0);
     }
 
     /**
@@ -66,19 +69,20 @@ public class intmatrix {
      * @param rows the number of rows in the matrix.
      * @param columns the number of columns in the matrix.
      * @param slices the number of slices in the matrix.
+     * @param hyperslices the number of hyperslices in the matrix.
      * @param zeropadding the zero padding to add around this matrix.
      */
-    public intmatrix(int rows, int columns, int slices, int zeropadding) {
-        this.rows = rows + zeropadding * 2;
-        this.columns = columns + zeropadding * 2;
+    public intmatrix(int rows, int columns, int slices, int hyperslices, int zeropadding) {
+        this.rows = rows;
+        this.columns = columns;
         this.slices = slices;
+        this.hyperslices = hyperslices;
         this.zeropadding = zeropadding;
         this.sliceSize = this.rows * this.columns;
-        this.size = sliceSize * slices;
+        this.hyperSliceSize = sliceSize * this.slices;
+        this.size = hyperSliceSize * hyperslices;
         data = IntBuffer.allocate(size);
-
-        padding[0] = 32 - ((columns) % 32);
-        padding[1] = 32 - ((rows) % 32);
+        deviceBuffer = new IntDeviceBuffer(this);
     }
 
     /**
@@ -87,7 +91,7 @@ public class intmatrix {
      * @param toCopy the intmatrix to copy.
      */
     public intmatrix(intmatrix toCopy) {
-        this(toCopy.rows, toCopy.columns, toCopy.slices, toCopy.zeropadding);
+        this(toCopy.rows, toCopy.columns, toCopy.slices, toCopy.hyperslices, toCopy.zeropadding);
         toCopy.data.rewind();
         this.data.rewind();
 
@@ -96,6 +100,14 @@ public class intmatrix {
         }
     }
     
+    /**
+     * Returns the name of this int matrix.
+     * @return the name.
+     */
+    public String getName(){
+        return name;
+    }
+
     /**
      * Gets the raw data of the matrix.
      *
@@ -129,7 +141,7 @@ public class intmatrix {
     }
 
     /**
-     * Converts a row and column coordinate to a 1D coordinate.
+     * Converts a row,column and slice coordinate to a 1D coordinate.
      *
      * @param r the row of the cell.
      * @param c the column of the cell.
@@ -141,23 +153,15 @@ public class intmatrix {
     }
 
     /**
-     * Checks if a row is inside the range that can be edited.
+     * Converts a row,column and slice coordinate to a 1D coordinate.
      *
-     * @param row the row to check.
-     * @return true if the row can be edited, false otherwise.
+     * @param r the row of the cell.
+     * @param c the column of the cell.
+     * @param s the slice number of the cell.
+     * @return the index of the cell in the 1D float backing array.
      */
-    private boolean checkRow(int row) {
-        return zeropadding <= row && row < getNrOfRows() - zeropadding;
-    }
-
-    /**
-     * Checks if a column is inside the range that can be edited.
-     *
-     * @param col the row to check.
-     * @return true if the column can be edited, false otherwise.
-     */
-    private boolean checkColumn(int col) {
-        return zeropadding <= col && col < getNrOfColumns() - zeropadding;
+    private int rcshToIndex(int r, int c, int s, int h) {
+        return rcsToIndex(r, c, s) + h * hyperSliceSize;
     }
 
     /**
@@ -176,10 +180,12 @@ public class intmatrix {
      * @param it the CellIterator object.
      */
     public void iterateCells(IntCellIterator it) {
-        for (int slice = 0; slice < getNrOfSlices(); ++slice) {
-            for (int row = 0; row < getNrOfRows(); ++row) {
-                for (int column = 0; column < getNrOfColumns(); ++column) {
-                    it.cell(this, row, column, slice, get(row, column, slice));
+        for (int hyperSlice = 0; hyperSlice < getNrOfSlices(); ++hyperSlice) {
+            for (int slice = 0; slice < getNrOfSlices(); ++slice) {
+                for (int row = 0; row < getNrOfRows(); ++row) {
+                    for (int column = 0; column < getNrOfColumns(); ++column) {
+                        it.cell(this, row, column, slice, hyperSlice, get(row, column, slice, hyperSlice));
+                    }
                 }
             }
         }
@@ -194,12 +200,10 @@ public class intmatrix {
      * @param value the new value for the cell.
      */
     public void set(int row, int column, int value) {
-        if (checkRow(row) && checkColumn(column)) {
-            data.put(rcToIndex(row, column), value);
-        }
+        data.put(rcToIndex(row, column), value);
     }
-    
-     /**
+
+    /**
      * Sets a cell in this matrix to the given value. The slice number is
      * assumed to be zero.
      *
@@ -209,12 +213,10 @@ public class intmatrix {
      * @param value the new value for the cell.
      */
     public void set(int row, int column, int slice, int value) {
-        if (checkRow(row) && checkColumn(column)) {
-            data.put(rcsToIndex(row, column, slice), value);
-        }
+        data.put(rcsToIndex(row, column, slice), value);
     }
-    
-     /**
+
+    /**
      * Gets the value of a cell. The slice number is one.
      *
      * @param row the row of the cell.
@@ -246,8 +248,26 @@ public class intmatrix {
             return 0;
         }
     }
-   
-     /**
+
+    /**
+     * Gets the value of a cell.
+     *
+     * @param row the row of the cell.
+     * @param column the column of the cell.
+     * @param slice the slice of the cell.
+     * @param hyperslice the hyperslice of the cell.
+     * @return the value of the cell.
+     */
+    public int get(int row, int column, int slice, int hyperslice) {
+        int index = rcshToIndex(row, column, slice, hyperslice);
+        if (index < data.limit()) {
+            return data.get(index);
+        } else {
+            return 0;
+        }
+    }
+
+    /**
      * Returns the number of rows.
      *
      * @return the number of rows.
@@ -271,6 +291,15 @@ public class intmatrix {
      * @return the number of slices.
      */
     public int getNrOfSlices() {
+        return slices;
+    }
+
+    /**
+     * Returns the number of slices in the matrix.
+     *
+     * @return the number of slices.
+     */
+    public int getNrOfHyperSlices() {
         return slices;
     }
 
@@ -300,105 +329,63 @@ public class intmatrix {
     public int getSize() {
         return this.size;
     }
-    
-     /**
-     * Get the padding for the columns.
-     *
-     * @return the padding for the columns.
-     */
-    public int getColPadding() {
-        return padding[0];
-    }
 
-    /**
-     * Get the padding for the rows.
-     *
-     * @return the padding for the rows.
-     */
-    public int getRowPadding() {
-        return padding[1];
-    }
-    
-    /**
-     * Get the number of columns on the device.
-     *
-     * @return the number of columns on the gpu device.
-     */
-    public int getDeviceColumns() {
-        return columns + getColPadding();
-    }
-
-    /**
-     * Get the number of rows on the device.
-     *
-     * @return the number of rows on the gpu device.
-     */
-    public int getDeviceRows() {
-        return rows + getRowPadding();
-    }
-    
-    public cl_mem getCLReadMem() {
-        if (rMem == null) {
-            System.out.println("creating new mem r buffer");
-            rMem = IntMatrixOpGpu.createReadMem(this, padding[0], padding[1]);
-        }
-        return rMem;
-    }
-
-    
-    public cl_mem getCLReadWriteMem() {
-        if (rwMem == null) {
-            System.out.println("creating new integer mem rw buffer");
-            rwMem = IntMatrixOpGpu.createReadWriteMem(this, padding[0], padding[1]);
-        }
-        return rwMem;
-    }
-    
     public Pointer getCLPointer() {
         return Pointer.to(data.array());
     }
-    
-    @Override
-    public String toString(){
-        return print(this);
+
+    public IntDeviceBuffer getDeviceBuffer() {
+        return deviceBuffer;
     }
     
+    public void sync(){
+        deviceBuffer.syncHost();
+    }
+
+    @Override
+    public String toString() {
+        return print(this);
+    }
+
     // static functions
-    
     public static String print(intmatrix m) {
         StringBuilder result = new StringBuilder();
-
-        for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
-            String[][] cells;
-            result.append("Slice ");
-            result.append((slice + 1));
-            result.append("\n-------\n");
-            cells = new String[m.getNrOfRows()][m.getNrOfColumns()];
-            int[] widths = new int[m.getNrOfColumns()];
-            for (int row = 0; row < m.getNrOfRows(); ++row) {
-                for (int column = 0; column < m.getNrOfColumns(); ++column) {
-                    String fs = Integer.toString(m.get(row, column, slice));
-                    cells[row][column] = fs;
-                    if (fs.length() > widths[column]) {
-                        widths[column] = fs.length();
+        for (int hyperSlice = 0; hyperSlice < m.getNrOfHyperSlices(); ++hyperSlice) {
+            result.append("| Hyperslice ");
+            result.append((hyperSlice + 1));
+            result.append(" |\n");
+            for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
+                String[][] cells;
+                result.append("| Slice ");
+                result.append((slice + 1));
+                result.append(" |\n");
+                cells = new String[m.getNrOfRows()][m.getNrOfColumns()];
+                int[] widths = new int[m.getNrOfColumns()];
+                for (int row = 0; row < m.getNrOfRows(); ++row) {
+                    for (int column = 0; column < m.getNrOfColumns(); ++column) {
+                        String fs = Integer.toString(m.get(row, column, slice));
+                        cells[row][column] = fs;
+                        if (fs.length() > widths[column]) {
+                            widths[column] = fs.length();
+                        }
                     }
                 }
-            }
-            for (int i = 0; i < widths.length; ++i) {
-                widths[i] = (widths[i] / 8 + 1) * 8;
-            }
-
-            for (int row = 0; row < m.getNrOfRows(); ++row) {
-                for (int column = 0; column < m.getNrOfColumns(); ++column) {
-                    int maxwidth = widths[column];
-                    String toAdd = cells[row][column];
-                    int charsToAdd = maxwidth - toAdd.length();
-                    result.append(toAdd);
-                    for (int i = 0; i < charsToAdd; ++i) {
-                        result.append(' ');
-                    }
+                for (int i = 0; i < widths.length; ++i) {
+                    widths[i] = (widths[i] / 8 + 1) * 8;
                 }
-                result.append('\n');
+
+                for (int row = 0; row < m.getNrOfRows(); ++row) {
+                    for (int column = 0; column < m.getNrOfColumns(); ++column) {
+                        int maxwidth = widths[column];
+                        String toAdd = cells[row][column];
+                        int charsToAdd = maxwidth - toAdd.length();
+                        result.append(toAdd);
+                        for (int i = 0; i < charsToAdd; ++i) {
+                            result.append(' ');
+                        }
+                    }
+                    result.append('\n');
+                }
             }
         }
         return result.toString();
