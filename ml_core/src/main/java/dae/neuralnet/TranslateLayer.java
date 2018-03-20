@@ -98,4 +98,12 @@ public class TranslateLayer extends AbstractLayer {
         System.out.println("weight analysis of " + getName() + " weights");
         System.out.println(wa1);
     }
+
+    /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    @Override
+    public void sync() {
+        this.weights.sync();
+    }
 }

@@ -35,15 +35,15 @@ public class BinImageReader {
             int columns = ReadInt(bis);
 
             int imageSize = rows * columns;
-            result = new fmatrix(nrOfImages, rows * columns);
+            result = new fmatrix(rows * columns, 1, 1, nrOfImages);
 
             byte[] pixelBlock = new byte[imageSize];
             for (int i = 0; i < nrOfImages; ++i) {
                 dis.read(pixelBlock);
                 for (int pixel = 0; pixel < imageSize; ++pixel) {
-                    int cp = pixelBlock[pixel]&0xff; // &0xff;
-                    float pixelValue = (float) ( cp / 255.0f)  ; // / 255.0f);
-                    result.set(i, pixel, pixelValue);
+                    int cp = pixelBlock[pixel] & 0xff; // &0xff;
+                    float pixelValue = (float) (cp / 255.0f); // / 255.0f);
+                    result.set(pixel, 0, 0, i, pixelValue);
                     /*float test = m_Result->get_value(i,pixel);
                         if ( test != pixelValue )
                                 cout << "pixel misplaced\n";*/

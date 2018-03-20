@@ -27,18 +27,18 @@ public class BinLabelReader {
     private void Read() {
         try {
             BufferedInputStream bis = new BufferedInputStream(getClass().getResourceAsStream(filename));
-            
+
             DataInputStream dis = new DataInputStream(bis);
             int magicNumber = ReadInt(bis);
             int nrOfItems = ReadInt(bis);
 
-            result = new fmatrix(1, nrOfItems);
+            result = new fmatrix(10, 1, 1, nrOfItems);
 
             byte[] pixelBlock = new byte[nrOfItems];
             dis.read(pixelBlock);
             for (int i = 0; i < nrOfItems; ++i) {
-                float label = (pixelBlock[i] & 0xff);
-                result.set(0, i, label);
+                int label = (pixelBlock[i] & 0xff);
+                result.set(label, 0, 0, i, 1);
             }
             dis.close();
         } catch (IOException ex) {

@@ -16,6 +16,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static dae.matrix.gpu.MatrixTestUtil.*;
+import dae.neuralnet.activation.ActivationFunction;
 
 /**
  *
@@ -234,7 +235,7 @@ public class FMatrixOpTest {
         long end1 = System.currentTimeMillis();
         System.out.println("Batch convolve - GPU time : " + (end1 - start1));
         output1.sync();
-        
+
         long start2 = System.currentTimeMillis();
         cpu.batchCorrelate(input, filter, 1, output2);
         long end2 = System.currentTimeMillis();
@@ -254,7 +255,7 @@ public class FMatrixOpTest {
         deltas.randomize(-1, 1);
         // 4 filter slices of 5x5 with no zero padding.
         fmatrix filters = new fmatrix(5, 5, 4);
-        filters.randomize(-4,4);
+        filters.randomize(-4, 4);
         // 2 output slices of 28x28 with no zero padding.
         fmatrix gpu_outputs = new fmatrix(28, 28, 2);
         fmatrix cpu_outputs = new fmatrix(28, 28, 2);
@@ -262,7 +263,7 @@ public class FMatrixOpTest {
         gpu.batchBackpropCorrelate(deltas, filters, 1, gpu_outputs);
         cpu.batchBackpropCorrelate(deltas, filters, 1, cpu_outputs);
         gpu_outputs.sync();
-        
+
         System.out.println("GPU output");
         System.out.println(gpu_outputs);
         System.out.println("CPU output");
@@ -272,18 +273,53 @@ public class FMatrixOpTest {
     }
 
     @Test
-    public void testSigmoid() {
-        fmatrix inputMatrix1 = new fmatrix(4, 12, 3);
-        inputMatrix1.randomize(-2, 2);
-        fmatrix inputMatrix2 = new fmatrix(inputMatrix1);
+    public void testActivation() {
+        testActivationFunction(ActivationFunction.SIGMOID);
+        testActivationFunction(ActivationFunction.CESIGMOID);
+        testActivationFunction(ActivationFunction.RELU);
+        testActivationFunction(ActivationFunction.LEAKYRELU);
+        testActivationFunction(ActivationFunction.TANH);
 
-        cpu.sigmoid(inputMatrix1);
-        gpu.sigmoid(inputMatrix2);
+        testDActivationFunction(ActivationFunction.SIGMOID);
+        testDActivationFunction(ActivationFunction.CESIGMOID);
+        testDActivationFunction(ActivationFunction.IDENTITY);
+        testDActivationFunction(ActivationFunction.RELU);
+        testDActivationFunction(ActivationFunction.LEAKYRELU);
+        testDActivationFunction(ActivationFunction.TANH);
+    }
 
-//        System.out.println(inputMatrix1);
-//        System.out.println(inputMatrix2);
-        inputMatrix2.sync();
-        assertMatrixEquals(inputMatrix1, inputMatrix2);
+    private void testActivationFunction(ActivationFunction function) {
+        Random r = new Random(System.currentTimeMillis());
+        int rs = r.nextInt(10) + 5;
+        int cs = r.nextInt(10) + 5;
+        int ss = r.nextInt(10) + 5;
+        int hs = r.nextInt(10) + 4;
+
+        fmatrix aGPU = new fmatrix(rs, cs, ss, hs);
+        aGPU.randomize(-5, 5);
+        fmatrix aCPU = new fmatrix(aGPU);
+        cpu.applyActivation(function, aCPU);
+        gpu.applyActivation(function, aGPU);
+        aGPU.sync();
+
+        assertMatrixEquals(aGPU, aCPU);
+    }
+
+    private void testDActivationFunction(ActivationFunction function) {
+        Random r = new Random(System.currentTimeMillis());
+        int rs = r.nextInt(10) + 5;
+        int cs = r.nextInt(10) + 5;
+        int ss = r.nextInt(10) + 5;
+        int hs = r.nextInt(10) + 4;
+
+        fmatrix reluGPU = new fmatrix(rs, cs, ss, hs);
+        reluGPU.randomize(-5, 5);
+        fmatrix reluCPU = new fmatrix(reluGPU);
+        cpu.applyDerivedActivation(function, reluCPU);
+        gpu.applyDerivedActivation(function, reluGPU);
+        reluGPU.sync();
+
+        assertMatrixEquals(reluGPU, reluCPU);
     }
 
     @Test
@@ -296,7 +332,19 @@ public class FMatrixOpTest {
         this.gpu.sgemm(1, op1, op2, 0, result1);
         this.cpu.sgemm(1, op1, op2, 0, result2);
 
+        fmatrix op3 = new fmatrix(15, 32);
+        op3.randomize(-5, 5);
+
+        fmatrix result2cpu = new fmatrix(23, 32);
+        fmatrix result2gpu = new fmatrix(23, 32);
+        this.cpu.sgemm(1, result2, op3, .5f, result2cpu);
+        this.gpu.sgemm(1, result1, op3, .5f, result2gpu);
+
+        result1.sync();
         assertMatrixEquals(result1, result2);
+
+        result2gpu.sync();
+        assertMatrixEquals(result2cpu, result2gpu);
     }
 
     @Test
@@ -335,10 +383,9 @@ public class FMatrixOpTest {
     @Test
     public void testMaxPool() {
         fmatrix input = new fmatrix(10, 10, 2);
+        input.randomize(-3, 3);
         intmatrix maskLayer1 = new intmatrix(5, 5, 2);
         intmatrix maskLayer2 = new intmatrix(5, 5, 2);
-        Random r = new Random(System.currentTimeMillis());
-        input.applyFunction(x -> r.nextFloat());
 
         fmatrix output1 = new fmatrix(5, 5, 2);
         fmatrix output2 = new fmatrix(5, 5, 2);
@@ -357,6 +404,7 @@ public class FMatrixOpTest {
         cpu.batchBackpropMaxPool(output1, maskLayer1, backprop1);
         gpu.batchBackpropMaxPool(output1, maskLayer2, backprop2);
 
+        backprop2.sync();
         assertMatrixEquals(backprop1, backprop2);
     }
 
@@ -491,5 +539,75 @@ public class FMatrixOpTest {
         GPU.zeroFillR(input1);
         GPU.downloadRMatrix(input1);
         assertMatrixEquals(input1, inputCopy);
+    }
+
+    @Test
+    public void testDotSquare() {
+        fmatrix input1Gpu = new fmatrix(400, 200, 5, 2);
+        input1Gpu.randomize(-10, 10);
+
+        fmatrix input1Cpu = new fmatrix(input1Gpu);
+
+        cpu.square(input1Cpu);
+        gpu.square(input1Gpu);
+        input1Gpu.sync();
+        assertMatrixEquals(input1Cpu, input1Gpu);
+    }
+
+    @Test
+    public void testAdamVelocity() {
+        fmatrix input1Gpu = new fmatrix(400, 200, 5, 2);
+        input1Gpu.randomize(-10, 10);
+        fmatrix input1Cpu = new fmatrix(input1Gpu);
+
+        fmatrix input2Gpu = new fmatrix(400, 200, 5, 2);
+        input2Gpu.randomize(-10, 10);
+        fmatrix input2Cpu = new fmatrix(input2Gpu);
+
+        cpu.adamVelocity(input1Cpu, 0.9f, input1Cpu, input2Cpu);
+        gpu.adamVelocity(input1Gpu, 0.9f, input1Gpu, input2Gpu);
+        input1Gpu.sync();
+        assertMatrixEquals(input1Cpu, input1Gpu);
+    }
+
+    @Test
+    public void testAdamAdaptWeights() {
+        int r = 10;
+        int c = 7;
+
+        fmatrix gpuW = new fmatrix(r, c, 5, 2);
+        fmatrix gpuM = new fmatrix(r, c, 5, 2);
+        fmatrix gpuV = new fmatrix(r, c, 5, 2);
+        gpuW.randomize(-10, 10);
+        gpuM.randomize(-10, 10);
+        // gradient can not be negative.
+        gpuV.randomize(1, 10);
+
+        fmatrix cpuW = new fmatrix(gpuW);
+        fmatrix cpuM = new fmatrix(gpuM);
+        fmatrix cpuV = new fmatrix(gpuV);
+
+        cpu.adamAdaptWeights(cpuW, 0.1f, 0.9f, 0.999f, 1e-4f, cpuM, cpuV);
+        gpu.adamAdaptWeights(gpuW, 0.1f, 0.9f, 0.999f, 1e-4f, gpuM, gpuV);
+        gpuW.sync();
+        assertMatrixEquals(cpuW, gpuW);
+    }
+
+    @Test
+    public void testDotMultiplyFactor() {
+        fmatrix input1Gpu = new fmatrix(400, 200, 5, 2);
+        input1Gpu.randomize(-10, 10);
+        fmatrix input1Cpu = new fmatrix(input1Gpu);
+
+        cpu.dotmultiply(input1Cpu, input1Cpu, 0.5542f);
+        gpu.dotmultiply(input1Gpu, input1Gpu, 0.5542f);
+        input1Gpu.sync();
+        assertMatrixEquals(input1Cpu, input1Gpu);
+    }
+
+    @Test
+    public void testRandom() {
+        fmatrix toRandomize = new fmatrix(10, 10);
+        gpu.randomize(toRandomize, -5, 5);
     }
 }

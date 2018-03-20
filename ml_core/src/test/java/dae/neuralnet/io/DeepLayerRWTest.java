@@ -11,7 +11,6 @@ import dae.neuralnet.DeepLayer;
 import dae.neuralnet.FuzzyficationLayer;
 import dae.neuralnet.ILayer;
 import dae.neuralnet.Layer;
-import dae.neuralnet.LearningRate;
 import dae.neuralnet.LearningRateConst;
 import dae.neuralnet.PoolLayer;
 import dae.neuralnet.activation.ActivationFunction;

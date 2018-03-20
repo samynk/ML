@@ -37,6 +37,18 @@ public class tmatrix implements imatrix {
     public boolean isRowVector() {
         return source.getNrOfColumns() == 1 && getNrOfSlices() == 1;
     }
+    
+    /**
+     * Checks if this matrix is a batch matrix, in other words it is a multiple
+     * of a row vector.
+     *
+     * @return true if this matrix is a row vector with a number of hyperslices
+     * that is bigger than 1.
+     */
+    @Override
+    public boolean isBatchMatrix() {
+        return source.isBatchMatrix();
+    }
 
     public void setSource(imatrix source) {
         this.source = source;
@@ -60,6 +72,14 @@ public class tmatrix implements imatrix {
     @Override
     public void setRow(int row, float[] values) {
         source.setColumn(row, values);
+    }
+
+    /**
+     * Resets all the values in the matrix to zero.
+     */
+    @Override
+    public void reset() {
+        source.reset();
     }
 
     @Override
@@ -189,13 +209,21 @@ public class tmatrix implements imatrix {
     public FloatDeviceBuffer getDeviceBuffer() {
         return source.getDeviceBuffer();
     }
-    
+
     /**
      * Synchronizes the host buffer with the device buffer if necessary.
      */
     @Override
-    public void sync(){
+    public void sync() {
         source.sync();
+    }
+
+    /**
+     * Make the cpu buffer the most current.
+     */
+    @Override
+    public void makeMaster() {
+        source.makeMaster();
     }
 
     /**
@@ -229,6 +257,11 @@ public class tmatrix implements imatrix {
     @Override
     public imatrix copy() {
         return new tmatrix(source.copy());
+    }
+
+    @Override
+    public String toString() {
+        return fmatrix.print(this);
     }
 
 }

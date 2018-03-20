@@ -52,7 +52,6 @@ public class GPU {
 
     private static final long maxWorkItemSizes[];
 
-
     static {
         // The platform, device type and device number
         // that will be used
@@ -173,6 +172,14 @@ public class GPU {
         zeroFill(mDB.getRMem(), mDB.getDeviceSize());
     }
 
+    public static void fillR(imatrix O, float f) {
+        float[] pattern = new float[]{f};
+        FloatDeviceBuffer db = O.getDeviceBuffer();
+
+        clEnqueueFillBuffer(CL_COMMAND_QUEUE, O.getDeviceBuffer().getRMem(),
+                Pointer.to(pattern), Sizeof.cl_float, 0, db.getDeviceSize(), 0, null, null);
+    }
+
     public static final void zeroFillRW(imatrix m) {
         FloatDeviceBuffer mDB = m.getDeviceBuffer();
         zeroFill(mDB.getRWMem(), mDB.getDeviceSize());
@@ -180,7 +187,7 @@ public class GPU {
 
     private static void zeroFill(cl_mem buffer, int size) {
         float zero[] = new float[1];
-        clEnqueueFillBuffer(CL_COMMAND_QUEUE, buffer, Pointer.to(zero), Float.BYTES, 0, size, 0, null, null);
+        clEnqueueFillBuffer(CL_COMMAND_QUEUE, buffer, Pointer.to(zero), Sizeof.cl_float, 0, size, 0, null, null);
     }
 
     /**
@@ -210,8 +217,8 @@ public class GPU {
         enqueueWriteMatrix(m, buffer);
         return buffer;
     }
-    
-        /**
+
+    /**
      * Writes to a buffer object on the device that is defined as a read only
      * buffer on the device.
      *
@@ -260,8 +267,8 @@ public class GPU {
                 null,
                 null);
     }
-    
-     /**
+
+    /**
      * Writes the matrix m into the provided device buffer on the device.
      *
      * @param m the matrix m to upload into the device.
@@ -377,8 +384,26 @@ public class GPU {
                 0, 0,
                 db.getDeviceSize(), 0, null, null);
     }
-    
-    static void copyRWBuffer(intmatrix cpuBuffer){
+
+    static void copyRBuffer(imatrix cpuBuffer) {
+        FloatDeviceBuffer db = cpuBuffer.getDeviceBuffer();
+        clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                db.getRMem(),
+                db.getRWMem(),
+                0, 0,
+                db.getDeviceSize(), 0, null, null);
+    }
+
+    static void copyRBuffer(intmatrix cpuBuffer) {
+        IntDeviceBuffer db = cpuBuffer.getDeviceBuffer();
+        clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                db.getRMem(),
+                db.getRWMem(),
+                0, 0,
+                db.getDeviceSize(), 0, null, null);
+    }
+
+    static void copyRWBuffer(intmatrix cpuBuffer) {
         IntDeviceBuffer db = cpuBuffer.getDeviceBuffer();
         clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
                 db.getRWMem(),
@@ -431,4 +456,5 @@ public class GPU {
         }
         dbDst.markRMatrixAsMaster();
     }
+
 }

@@ -6,7 +6,6 @@ import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.analysis.WeightAnalysis;
 import dae.neuralnet.analysis.WeightAnalyzer;
-import dae.neuralnet.matrix.MatrixFactory;
 import java.nio.file.Paths;
 import java.util.Random;
 
@@ -23,8 +22,19 @@ import java.util.Random;
  */
 public class Layer extends AbstractLayer {
 
+    // adam test
+    private final imatrix moment;
+    private final imatrix velocity;
+
+    private final float beta1 = 0.9f;
+    private float beta1Corr = beta1;
+    private final float beta2 = 0.999f;
+    private float beta2Corr = beta2;
+    private final float epsilon = 1e-8f;
+
     private final imatrix weights;
     private final imatrix tweights;
+    private final imatrix tdeltas;
 
     private imatrix constraint;
 
@@ -111,7 +121,12 @@ public class Layer extends AbstractLayer {
     public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af, imatrix weights) {
         super(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af);
         this.weights = weights;
+
+        this.moment = new fmatrix(weights.getNrOfRows(), weights.getNrOfColumns());
+        this.velocity = new fmatrix(weights.getNrOfRows(), weights.getNrOfColumns());
+
         this.tweights = new tmatrix(weights);
+        this.tdeltas = new tmatrix(deltas);
         this.deltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
         this.batchDeltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
     }
@@ -171,44 +186,34 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void forward() {
-        outputs.reset();
-        imatrix weightMatrix = weights;
+        //outputs.reset();
+        imatrix weightMatrix = tweights;
         if (dropRateSet) {
             this.constraint.applyFunction(x -> dropRandom.nextFloat() > dropRate ? 1 : 0);
             fmatrix.dotmultiply(dropWeightMatrix, constraint, weights);
-            weightMatrix = dropWeightMatrix;
+            weightMatrix = tDropWeightMatrix;
         }
-
-        fmatrix.sgemm(1, inputs, weightMatrix, 0, outputs);
+        fmatrix.sgemm(1, weightMatrix, inputs, 0, outputs);
+        //fmatrix.sgemm(1, inputs, weightMatrix, 0, outputs);
 
         switch (function) {
             case SOFTMAX:
+                outputs.sync();
                 fmatrix.softMaxPerRow(outputs);
+                outputs.makeMaster();
                 break;
 
             default:
-                outputs.applyFunction(this.activation);
+                fmatrix.applyActivation(this.function, outputs);
         }
     }
 
     @Override
     public void calculateNewWeights(float learningRate) {
-//        // 4.a Multiply the transposes inputs with the deltas.
-//        fmatrix.multiply(this.deltaWeights, this.tinputs, this.deltas);
-//
-//        // 4.b Multiply with the learning rate.
-//        deltaWeights.multiply(learningRate);
-//        // 4.c apply the constraints
-//        if (constraint != null) {
-//            fmatrix.dotmultiply(deltaWeights, deltaWeights, constraint);
-//        }
-//        // 4.d deltaWeights now holds the new values for the weights.
-//        fmatrix.dotsubtract(deltaWeights, weights, deltaWeights);
-        fmatrix.sgemm(-1, tinputs, deltas, 0, deltaWeights);
+        fmatrix.sgemm(-1, inputs, tdeltas, 0, deltaWeights);
         if (dropRateSet) {
             fmatrix.dotmultiply(deltaWeights, deltaWeights, constraint);
         }
-        fmatrix.dotadd(batchDeltaWeights, batchDeltaWeights, deltaWeights);
     }
 
     /**
@@ -218,19 +223,27 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void calculateErrors(fmatrix errors) {
-        errors.reset();
-        imatrix t = tweights;
+        // errors.reset();
+        imatrix t = weights;
         if (dropRateSet) {
-            t = tDropWeightMatrix;
+            t = dropWeightMatrix;
         }
-        fmatrix.sgemm(1, this.deltas, t, 0, errors);
+        fmatrix.sgemm(1, t, deltas, 0, errors);
         //fmatrix.multiply(deltas, this.deltas, this.tweights);
     }
 
     @Override
     public void adaptWeights(float factor) {
-        fmatrix.dotadd(weights, 1, weights, factor, batchDeltaWeights);
-        batchDeltaWeights.applyFunction(x -> 0.0f);
+        fmatrix.dotadd(moment, beta1, moment, 1 - beta1, deltaWeights);
+        fmatrix.adamVelocity(velocity, beta2, velocity, deltaWeights);
+
+        // beta1 and beta2 need to die out.
+        fmatrix.adamAdaptWeights(weights, -factor, beta1Corr, beta2Corr, epsilon, moment, velocity);
+        //fmatrix.dotadd(weights, 1, weights, factor, deltaWeights);
+        beta1Corr *= 0.9f;
+        beta2Corr *= 0.9f;
+//        beta1Corr *= beta1;
+//        beta2Corr *= beta2;
     }
 
     /**
@@ -242,7 +255,7 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void randomizeWeights(Random r, float min, float max) {
-        weights.applyFunction(x -> min + r.nextFloat() * (max - min));
+        weights.applyFunction(x -> (float) r.nextGaussian() / 10.0f);
     }
 
     public void printInputs() {
@@ -258,8 +271,7 @@ public class Layer extends AbstractLayer {
     public void writeOutputImage(String file) {
 
     }
-    
-    
+
     @Override
     public void analyzeWeights() {
         WeightAnalysis wa1 = WeightAnalyzer.analyzeMatrix(this.weights);
@@ -267,4 +279,11 @@ public class Layer extends AbstractLayer {
         System.out.println(wa1);
     }
 
+    /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    @Override
+    public void sync() {
+        this.weights.sync();
+    }
 }

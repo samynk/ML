@@ -12,6 +12,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static dae.matrix.gpu.MatrixTestUtil.*;
+import dae.matrix.integer.intmatrix;
 import org.jocl.cl_mem;
 
 /**
@@ -111,7 +112,33 @@ public class FMatrixUploadTest {
 
         fmatrix dst = new fmatrix(9, 12, 3, 7);
         GPU.enqueueReadMatrix(dst, mem_src);
+
+    }
+
+    @Test
+    public void testIntReadAndWrite() {
+        intmatrix mSrc = new intmatrix(5, 5, 1, 2, 2);
+        mSrc.randomize(-20, 20);
+        GPU.uploadRMatrix(mSrc);
+
+        intmatrix mCopy = new intmatrix(mSrc);
+        mSrc.reset();
+        System.out.println("Before download");
+        System.out.println(mSrc);
+
+        GPU.downloadRMatrix(mSrc);
+        System.out.println("src");
+        System.out.println(mSrc);
+        System.out.println("copy");
+        System.out.println(mCopy);
+        assertMatrixEquals(mSrc, mCopy);
         
+        intmatrix mSrc2 = new intmatrix(5,5,1,2,3);
+        mSrc2.randomize(-23, 23);
+        GPU.uploadRWMatrix(mSrc2);
+        intmatrix mCopy2 = new intmatrix(mSrc2);
         
+        GPU.downloadRWMatrix(mSrc2);
+        assertMatrixEquals(mCopy2,mSrc2);
     }
 }

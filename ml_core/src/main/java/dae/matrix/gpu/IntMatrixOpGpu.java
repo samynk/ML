@@ -25,7 +25,7 @@ public class IntMatrixOpGpu {
                 * cpuBuffer.getNrOfSlices()
                 * cpuBuffer.getNrOfHyperSlices() + padding;
         cl_mem mem = clCreateBuffer(GPU.CL_CONTEXT, mode,
-                (totalSize + padding) * Sizeof.cl_int, null, null);
+                totalSize * Sizeof.cl_int, null, null);
         return mem;
     }
 }

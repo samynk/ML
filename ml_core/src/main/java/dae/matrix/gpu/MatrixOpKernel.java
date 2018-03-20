@@ -4,8 +4,8 @@
  */
 package dae.matrix.gpu;
 
-import dae.matrix.BufferSyncState;
 import dae.matrix.imatrix;
+import dae.matrix.integer.intmatrix;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
 import static org.jocl.CL.clSetKernelArg;
 import org.jocl.Pointer;
@@ -25,14 +25,22 @@ public class MatrixOpKernel extends OpenCLKernel {
     cl_kernel dotaddlc;
     cl_kernel dotsubtract;
     cl_kernel dotmultiply;
+    cl_kernel dotmultiplyfactor;
+    cl_kernel square;
+    cl_kernel root;
+    cl_kernel init_random;
+    cl_kernel random;
+    cl_kernel adamVelocity;
+    cl_kernel adamAdaptWeights;
 
-    private long[] localWorkSize = new long[]{32};
+    private long[] localWorkSize = new long[]{OpenCLKernel.DEFAULTWORKSIZE};
 
     /**
      * Creates a new MatrixOpKernel object.
      */
     public MatrixOpKernel() {
         super("/kernels/neuralnet/matrixop.cl");
+        seedMatrix = new intmatrix(1, 1);
     }
 
     @Override
@@ -42,6 +50,14 @@ public class MatrixOpKernel extends OpenCLKernel {
         dotaddlc = this.createKernel("dotaddlc");
         dotsubtract = this.createKernel("dotsubtract");
         dotmultiply = this.createKernel("dotmultiply");
+        dotmultiplyfactor = this.createKernel("dotmultiplyfactor");
+        square = this.createKernel("squared");
+        root = this.createKernel("root");
+        init_random = this.createKernel("rnd_init");
+        random = this.createKernel("rnd_1");
+        adamVelocity = this.createKernel("adamVelocity");
+        adamAdaptWeights = this.createKernel("adamAdaptWeights");
+
         super.releaseProgram();
     }
 
@@ -98,9 +114,65 @@ public class MatrixOpKernel extends OpenCLKernel {
         return O;
     }
 
+    public imatrix adamVelocity(imatrix O, float beta2, imatrix previousVelocity, imatrix currentGradient) {
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
+        float[] factors = new float[]{beta2};
+        cl_mem memOutput = oDB.getRWMem();
+
+        cl_mem mem_op1 = previousVelocity.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = currentGradient.getDeviceBuffer().uploadRMatrix();
+
+        clSetKernelArg(adamVelocity, 0, Sizeof.cl_float, Pointer.to(factors));
+        clSetKernelArg(adamVelocity, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(adamVelocity, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(adamVelocity, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                adamVelocity,
+                1,
+                null,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        oDB.markRWMatrixAsMaster();
+        return O;
+    }
+    
+    public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
+        FloatDeviceBuffer oDB = weights.getDeviceBuffer();
+        float[] factors = new float[]{eta, 1f/(1-beta1), 1f/(1-beta2), epsilon};
+        cl_mem memOutput = oDB.uploadRWMatrix();
+
+        cl_mem mem_op1 = moment.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op2 = velocity.getDeviceBuffer().uploadRMatrix();
+        
+
+        clSetKernelArg(adamAdaptWeights, 0, Sizeof.cl_float4, Pointer.to(factors));
+        clSetKernelArg(adamAdaptWeights, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(adamAdaptWeights, 2, Sizeof.cl_mem, Pointer.to(mem_op2));
+        clSetKernelArg(adamAdaptWeights, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                adamAdaptWeights,
+                1,
+                null,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        oDB.markRWMatrixAsMaster();
+        return weights;
+    }
+
     public imatrix dotsubtract(imatrix O, imatrix op1, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        int[] oDim = oDB.getDeviceDimension();
         cl_mem memOutput = oDB.getRWMem();
 
         cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
@@ -126,7 +198,6 @@ public class MatrixOpKernel extends OpenCLKernel {
 
     public imatrix dotmultiply(imatrix O, imatrix op1, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        int[] oDim = oDB.getDeviceDimension();
         cl_mem memOutput = oDB.getRWMem();
 
         cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
@@ -149,5 +220,52 @@ public class MatrixOpKernel extends OpenCLKernel {
 
         oDB.markRWMatrixAsMaster();
         return O;
+    }
+
+    public imatrix dotmultiply(imatrix O, imatrix op1, float op2) {
+        FloatDeviceBuffer oDB = O.getDeviceBuffer();
+        cl_mem memOutput = oDB.getRWMem();
+
+        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+
+        clSetKernelArg(dotmultiplyfactor, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(dotmultiplyfactor, 1, Sizeof.cl_float, Pointer.to(new float[]{op2}));
+        clSetKernelArg(dotmultiplyfactor, 2, Sizeof.cl_mem, Pointer.to(memOutput));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                dotmultiplyfactor,
+                1,
+                null,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        oDB.markRWMatrixAsMaster();
+        return O;
+    }
+
+    public imatrix square(imatrix m) {
+        super.applyKernel(square, m);
+        return m;
+    }
+
+    public imatrix root(imatrix m) {
+        super.applyKernel(root, m);
+        return m;
+    }
+
+    private intmatrix seedMatrix;
+
+    void randomize(imatrix m, float min, float max) {
+        if (m.getSize() > seedMatrix.getSize()) {
+            seedMatrix = new intmatrix(m.getSize(), 1);
+            applyKernel(init_random, seedMatrix);
+        }
+        cl_mem seedMem = seedMatrix.getDeviceBuffer().getRWMem();
+        clSetKernelArg(random, 1, Sizeof.cl_mem, Pointer.to(seedMem));
+        applyKernel(random, m);
     }
 }

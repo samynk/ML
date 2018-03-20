@@ -5,6 +5,7 @@ import dae.matrix.gpu.FMatrixOpGpu;
 import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.Layer;
+import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.activation.Function;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -22,7 +23,7 @@ import javax.imageio.ImageIO;
  *
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
-public strictfp class fmatrix implements imatrix {
+public class fmatrix implements imatrix {
 
     /**
      * The name of the matrix.
@@ -155,6 +156,18 @@ public strictfp class fmatrix implements imatrix {
     }
 
     /**
+     * Checks if this matrix is a batch matrix, in other words it is a multiple
+     * of a row vector.
+     *
+     * @return true if this matrix is a row vector with a number of hyperslices
+     * that is bigger than 1.
+     */
+    @Override
+    public boolean isBatchMatrix() {
+        return getNrOfHyperSlices() > 1;
+    }
+
+    /**
      * Gets the raw data of the matrix.
      *
      * @return the raw data.
@@ -168,11 +181,7 @@ public strictfp class fmatrix implements imatrix {
      * Sets all the elements in this matrix to zero.
      */
     public void reset() {
-        data.rewind();
-        for (int i = 0; i < data.limit(); ++i) {
-            data.put(0);
-        }
-        data.rewind();
+        matrixOp.reset(this);
     }
 
     /**
@@ -409,6 +418,27 @@ public strictfp class fmatrix implements imatrix {
     }
 
     /**
+     * Returns the maximum values and the index of the cell per row.
+     *
+     * @param maxCells
+     */
+    public void maxPerColumn(ArrayList<Cell> maxCells) {
+        for (int h = 0; h < getNrOfHyperSlices(); ++h) {
+            float max = Float.MIN_VALUE;
+            Cell c = maxCells.get(h);
+            for (int r = 0; r < getNrOfRows(); ++r) {
+                float value = this.get(r, 0, 0, h);
+                if (value > max) {
+                    max = value;
+                    c.value = max;
+                    c.row = r;
+                    c.column = h;
+                }
+            }
+        }
+    }
+
+    /**
      * Gets the maximum value in the matrix.
      *
      * @param result a Cell object that will store the result.
@@ -509,6 +539,21 @@ public strictfp class fmatrix implements imatrix {
     }
 
     /**
+     * Stores a row of this matrix into the target row of the fmatrix storage.
+     *
+     * @param targetRow the target row for the fmatrix storage.
+     * @param row the row to get.
+     * @param targetSlice
+     * @param targetHyperSlice
+     * @param rowStorage the rowstorage to store the row in.
+     */
+    public void getRow(int row, int targetRow, int targetSlice, int targetHyperSlice, imatrix rowStorage) {
+        for (int c = 0; c < columns; ++c) {
+            rowStorage.set(targetRow, c, targetSlice, targetHyperSlice, get(row, c));
+        }
+    }
+
+    /**
      * Returns the column of the matrix as a matrix.
      *
      * @param column the column of the matrix.
@@ -544,6 +589,54 @@ public strictfp class fmatrix implements imatrix {
     public void getColumn(int column, int targetColumn, imatrix columnStorage) {
         for (int row = 0; row < rows; ++row) {
             columnStorage.set(row, targetColumn, this.get(row, column));
+        }
+    }
+
+    /**
+     * Stores a row of this matrix into the target row of the fmatrix storage.
+     *
+     * @param column the row to get.
+     * @param targetColumn the target row for the fmatrix storage.
+     * @param targetSlice
+     * @param targetHyperSlice
+     * @param columnStorage the rowstorage to store the row in.
+     */
+    public void getColumn(int column, int targetColumn, int targetSlice, int targetHyperSlice, imatrix columnStorage) {
+        for (int r = 0; r < this.getNrOfRows(); ++r) {
+            columnStorage.set(r, targetColumn, targetSlice, targetHyperSlice, get(r, column));
+        }
+    }
+
+    /**
+     * Stores a slice into the provided storage.
+     *
+     * @param hyperslice the hyperslice to get.
+     * @param targetHyperSlice the hyperslice to store the data in.
+     * @param storage the storage for the slice.
+     */
+    public void getHyperSlice(int hyperslice, int targetHyperSlice, imatrix storage) {
+        if (isTransposed() == storage.isTransposed()
+                && getSliceSize() == storage.getSliceSize()) {
+            // row - column layout is the same.
+            int srcStart = this.rcshToIndex(0, 0, 0, hyperslice);
+            int dstStart = storage.getSliceSize() * targetHyperSlice;
+            int tocopy = Math.min(getSliceSize(), storage.getSliceSize());
+            float[] src = this.data.array();
+            float[] dst = storage.getHostData().array();
+            System.arraycopy(src, srcStart, dst, dstStart, tocopy);
+        } else {
+            // no assumptions possible.
+            int iRows = Math.min(this.getNrOfRows(), storage.getNrOfRows());
+            int iCols = Math.min(this.getNrOfColumns(), storage.getNrOfColumns());
+            int iSlices = Math.min(this.getNrOfSlices(), storage.getNrOfSlices());
+            for (int r = 0; r < iRows; ++r) {
+                for (int c = 0; c < iCols; ++c) {
+                    for (int s = 0; s < iSlices; ++s) {
+                        float value = this.get(r, c, s, hyperslice);
+                        storage.set(r, c, s, targetHyperSlice, value);
+                    }
+                }
+            }
         }
     }
 
@@ -745,17 +838,18 @@ public strictfp class fmatrix implements imatrix {
 
     public static void softMaxPerRow(imatrix m) {
         m.applyFunction(x -> (float) Math.exp(x));
-
-        for (int slices = 0; slices < m.getNrOfSlices(); ++slices) {
-            for (int r = 0; r < m.getNrOfRows(); ++r) {
-                float sum = 0;
-                for (int c = 0; c < m.getNrOfColumns(); ++c) {
-                    float value = m.get(r, c);
-                    sum += value;
-                }
-                for (int c = 0; c < m.getNrOfColumns(); ++c) {
-                    float value = m.get(r, c) / sum;
-                    m.set(r, c, value);
+        for (int h = 0; h < m.getNrOfHyperSlices(); ++h) {
+            for (int slices = 0; slices < m.getNrOfSlices(); ++slices) {
+                for (int r = 0; r < m.getNrOfRows(); ++r) {
+                    float sum = 0;
+                    for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                        float value = m.get(r, c);
+                        sum += value;
+                    }
+                    for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                        float value = m.get(r, c) / sum;
+                        m.set(r, c, value);
+                    }
                 }
             }
         }
@@ -951,15 +1045,8 @@ public strictfp class fmatrix implements imatrix {
         }
     }
 
-    public static fmatrix dotmultiply(fmatrix op1, float op2) {
-        fmatrix result = new fmatrix(op1.getNrOfRows(), op1.getNrOfColumns());
-        for (int row = 0; row < result.getNrOfRows(); ++row) {
-            for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                float op1value = op1.get(row + 1, column + 1);
-                result.set(row, column, op1value * op2);
-            }
-        }
-        return result;
+    public static imatrix dotmultiply(imatrix result, fmatrix op1, float factor) {
+        return matrixOp.dotmultiply(result, op1, factor);
     }
 
     public static imatrix sgemm(float alpha, imatrix a, imatrix b, float beta, imatrix c) {
@@ -1076,6 +1163,28 @@ public strictfp class fmatrix implements imatrix {
      */
     public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
         matrixOp.batchBackpropMaxPool(input, maskLayer, output);
+    }
+
+    /**
+     * Applies the activation function on the given matrix.
+     *
+     * @param function the function that defines the derived activation
+     * function.
+     * @param m the matrix to apply the activation function to.
+     */
+    public static void applyActivation(ActivationFunction function, fmatrix m) {
+        matrixOp.applyActivation(function, m);
+    }
+
+    /**
+     * Applies the derived activation function on the given matrix.
+     *
+     * @param function the function that defines the derived activation
+     * function.
+     * @param m the matrix to apply the activation function to.
+     */
+    public static void applyDerivedActivation(ActivationFunction function, fmatrix m) {
+        matrixOp.applyDerivedActivation(function, m);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -1211,6 +1320,14 @@ public strictfp class fmatrix implements imatrix {
         return result;
     }
 
+    public static void adamVelocity(imatrix velocity, float beta2, imatrix previousVelocity, imatrix deltaWeights) {
+        matrixOp.adamVelocity(velocity, beta2, previousVelocity, deltaWeights);
+    }
+
+    public static void adamAdaptWeights(imatrix weights, float factor, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
+        matrixOp.adamAdaptWeights(weights, factor, beta1, beta2, epsilon, moment, velocity);
+    }
+
     public static imatrix mergeRows(imatrix op1, imatrix op2) {
         int cs = Math.max(op1.getNrOfColumns(), op2.getNrOfColumns());
         fmatrix result = new fmatrix(op1.getNrOfRows() + op2.getNrOfRows(), cs);
@@ -1274,7 +1391,7 @@ public strictfp class fmatrix implements imatrix {
     }
 
     public static void copyInto(imatrix toCopy, imatrix dest) {
-
+        matrixOp.copyInto(toCopy, dest);
     }
 
     /**
@@ -1493,12 +1610,16 @@ public strictfp class fmatrix implements imatrix {
                     .getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
+
     /**
      * Synchronizes the host buffer with the device buffer if necessary.
      */
     @Override
-    public void sync(){
+    public void sync() {
         this.deviceBuffer.syncHost();
+    }
+
+    public void makeMaster() {
+        deviceBuffer.markCpuMatrixAsMatrix();
     }
 }

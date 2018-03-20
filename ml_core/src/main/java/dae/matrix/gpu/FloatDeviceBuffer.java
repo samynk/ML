@@ -9,6 +9,7 @@ import dae.matrix.imatrix;
 import static org.jocl.CL.CL_MEM_READ_ONLY;
 import static org.jocl.CL.CL_MEM_READ_WRITE;
 import org.jocl.Pointer;
+import org.jocl.Sizeof;
 import org.jocl.cl_mem;
 
 /**
@@ -24,7 +25,7 @@ public class FloatDeviceBuffer {
     private int padding;
     private int deviceSize;
     private final long[] globalWorkSize = new long[1];
-    private static final int LOCALSIZE = 32;
+    private static final int LOCALSIZE = OpenCLKernel.DEFAULTWORKSIZE;
 
     private BufferSyncState cpuBufferState = BufferSyncState.UPTODATE;
     private BufferSyncState rGPUBufferState = BufferSyncState.OUTOFDATE;
@@ -55,7 +56,7 @@ public class FloatDeviceBuffer {
 
         padding = LOCALSIZE - (totalSize % LOCALSIZE);
         globalWorkSize[0] = (totalSize + padding);
-        deviceSize = (totalSize + padding) * Float.BYTES;
+        deviceSize = (totalSize + padding) * Sizeof.cl_float;
 
         hostRegion[0] = cpuBuffer.getNrOfRows() * Float.BYTES;
         hostRegion[1] = cpuBuffer.getNrOfColumns();
@@ -163,6 +164,20 @@ public class FloatDeviceBuffer {
         return rmem;
     }
 
+    public cl_mem uploadRWMatrix() {
+        cl_mem rwmem = getRWMem();
+        if (rwGPUBufferState == BufferSyncState.OUTOFDATE) {
+            if (rGPUBufferState == BufferSyncState.UPTODATE) {
+                GPU.copyRBuffer(cpuBuffer);
+                rwGPUBufferState = BufferSyncState.UPTODATE;
+            }else{
+                GPU.uploadRWMatrix(cpuBuffer);
+                rwGPUBufferState = BufferSyncState.UPTODATE;
+            }
+        }
+        return rwmem;
+    }
+
     public void downloadMatrix() {
         if (cpuBufferState == BufferSyncState.OUTOFDATE) {
             if (rGPUBufferState == BufferSyncState.UPTODATE) {
@@ -206,15 +221,16 @@ public class FloatDeviceBuffer {
     public int[] getDeviceDimension() {
         return deviceDimension;
     }
-    
+
     /**
      * Returns an array of 3 elements with the size of the different dimensions.
-     * the first element is the number of rows.
-     * the second element is the size of one slice (rows*columns)
-     * the third element is the size of one hyper slice (rows*columns*slices).
+     * the first element is the number of rows. the second element is the size
+     * of one slice (rows*columns) the third element is the size of one hyper
+     * slice (rows*columns*slices).
+     *
      * @return an array with sizes of the dimensions of this matrix.
      */
-    public int[] getDimensionSizes(){
+    public int[] getDimensionSizes() {
         return dimensions;
     }
 
@@ -264,4 +280,11 @@ public class FloatDeviceBuffer {
         this.rGPUBufferState = BufferSyncState.UPTODATE;
         this.rwGPUBufferState = BufferSyncState.OUTOFDATE;
     }
+
+    public void markCpuMatrixAsMatrix() {
+        this.cpuBufferState = BufferSyncState.UPTODATE;
+        this.rGPUBufferState = BufferSyncState.OUTOFDATE;
+        this.rwGPUBufferState = BufferSyncState.OUTOFDATE;
+    }
+
 }

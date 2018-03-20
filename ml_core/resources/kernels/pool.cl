@@ -74,28 +74,31 @@ __kernel void backpropMaxpool(
     __global float* O,
     __global int* M,
     // the dimensions of the the input matrix.
-    const int2 iDim,
+    const int3 iDim,
     // the scale of the max pool filter.
     const int2 fDim,
     // the dimensions of the output matrix.
-    const int2 oDim
+    const int3 oDim
 )
 {
-    int gCol = get_global_id(0);
-    int gRow = get_global_id(1);
-    int slice = get_global_id(2);
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
     
-    int iCB = gCol / fDim.x;
-    int iRB = gRow / fDim.y;
+    int gCol = rcsh.x; 
+    int gRow = rcsh.y;
+    int slice = rcsh.z;
+    int hyperSlice = rcsh.w;
+    
+    int iRB = gRow / fDim.x;
+    int iCB = gCol / fDim.y;
 
-    int iIndex = iRB + iCB * iDim.y + slice * iDim.x * iDim.y;
-
+    int iIndex = rcshToIndex( (int4)(iRB,iCB,slice,hyperSlice),iDim);
     int cell = M[iIndex];
 
-    int2 oCoord = (int2)(cell/fDim.y, cell%fDim.y);
-    int2 iCoord = ((int2)(gCol%fDim.x,gRow%fDim.y) );
+    int2 oCoord = (int2)( cell%fDim.x, cell/fDim.x );
+    int2 iCoord = (int2)( gRow%fDim.y, gCol%fDim.x );
 
-    int oIndex = gRow + gCol * oDim.y + slice * oDim.x * oDim.y;
+    int oIndex = rcshToIndex( (int4)(gRow,gCol,slice,hyperSlice),oDim);
 
     if(oCoord.x == iCoord.x && oCoord.y == iCoord.y){
         O[oIndex] = I[iIndex];

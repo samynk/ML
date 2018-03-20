@@ -42,12 +42,12 @@ public class PoolKernel extends OpenCLKernel {
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
         IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
-
+        
         int scaleX = input.getNrOfColumns() / output.getNrOfColumns();
         int scaleY = input.getNrOfRows() / output.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
         cl_mem memInput = inputDB.uploadRMatrix();
-        cl_mem memMask = maskDB.getRMem();
+        cl_mem memMask = maskDB.getRWMem();
         cl_mem memOutput = outputDB.getRWMem();
 
         clSetKernelArg(maxPool, 0, Sizeof.cl_mem, Pointer.to(memInput));
@@ -77,13 +77,11 @@ public class PoolKernel extends OpenCLKernel {
         IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
 
-        int[] iDim = inputDB.getDeviceDimension();
-        int[] oDim = outputDB.getDeviceDimension();
         int scaleX = output.getNrOfColumns() / input.getNrOfColumns();
         int scaleY = output.getNrOfRows() / input.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
         cl_mem memInput = GPU.uploadRMatrix(input);
-        cl_mem memMask = maskDB.getRWMem();
+        cl_mem memMask = maskDB.uploadRMatrix();
         cl_mem memOutput = outputDB.getRWMem();
 
         clSetKernelArg(bpMaxPool, 0, Sizeof.cl_mem, Pointer.to(memInput));
@@ -91,7 +89,7 @@ public class PoolKernel extends OpenCLKernel {
         clSetKernelArg(bpMaxPool, 2, Sizeof.cl_mem, Pointer.to(memMask));
         clSetKernelArg(bpMaxPool, 3, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
         clSetKernelArg(bpMaxPool, 4, Sizeof.cl_int2, Pointer.to(fDim));
-        clSetKernelArg(bpMaxPool, 5, Sizeof.cl_int2, Pointer.to(outputDB.getDimensionSizes()));
+        clSetKernelArg(bpMaxPool, 5, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
 
         clEnqueueNDRangeKernel(
                 commandQueue,
@@ -105,5 +103,6 @@ public class PoolKernel extends OpenCLKernel {
                 null);
 
         outputDB.markRWMatrixAsMaster();
+        maskDB.markRWMatrixAsMaster();
     }
 }

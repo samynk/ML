@@ -44,6 +44,18 @@ public class zpmatrix implements imatrix {
     public boolean isRowVector() {
         return source.isRowVector();
     }
+    
+     /**
+     * Checks if this matrix is a batch matrix, in other words it is a multiple
+     * of a row vector.
+     *
+     * @return true if this matrix is a row vector with a number of hyperslices
+     * that is bigger than 1.
+     */
+    @Override
+    public boolean isBatchMatrix() {
+        return source.isBatchMatrix();
+    }
 
     @Override
     public void set(int row, int column, float value) {
@@ -63,6 +75,14 @@ public class zpmatrix implements imatrix {
     @Override
     public void setRow(int row, float[] values) {
         source.setRow(row, values);
+    }
+    
+    /**
+     * Resets all the values in the matrix to zero.
+     */
+    @Override
+    public void reset(){
+        source.reset();
     }
 
     @Override
@@ -194,13 +214,21 @@ public class zpmatrix implements imatrix {
     public FloatDeviceBuffer getDeviceBuffer() {
         return source.getDeviceBuffer();
     }
-    
+
     /**
      * Synchronizes the host buffer with the device buffer if necessary.
      */
     @Override
-    public void sync(){
+    public void sync() {
         source.sync();
+    }
+
+    /**
+     * Make the cpu buffer the most current.
+     */
+    @Override
+    public void makeMaster() {
+        source.makeMaster();
     }
 
     @Override

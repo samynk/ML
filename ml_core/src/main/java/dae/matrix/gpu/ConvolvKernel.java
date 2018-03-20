@@ -5,10 +5,7 @@
 package dae.matrix.gpu;
 
 import dae.matrix.imatrix;
-import static org.jocl.CL.CL_TRUE;
-import static org.jocl.CL.clEnqueueFillBuffer;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
-import static org.jocl.CL.clEnqueueWriteBuffer;
 import static org.jocl.CL.clSetKernelArg;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;

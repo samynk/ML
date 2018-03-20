@@ -4,16 +4,10 @@
  */
 package dae.matrix.gpu;
 
-import dae.matrix.BufferSyncState;
 import dae.matrix.imatrix;
-import static org.jocl.CL.clEnqueueNDRangeKernel;
-import static org.jocl.CL.clSetKernelArg;
-import org.jocl.Pointer;
-import org.jocl.Sizeof;
 import org.jocl.cl_command_queue;
 import org.jocl.cl_context;
 import org.jocl.cl_kernel;
-import org.jocl.cl_mem;
 
 /**
  * Kernels to calculate the activation functions.
@@ -21,11 +15,19 @@ import org.jocl.cl_mem;
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
 public class ActivationKernel extends OpenCLKernel {
-
+    private cl_kernel softmax;
     private cl_kernel sigmoid;
     private cl_kernel dsigmoid;
+    private cl_kernel relu;
+    private cl_kernel drelu;
+    private cl_kernel leakyrelu;
+    private cl_kernel dleakyrelu;
+    private cl_kernel tanh;
+    private cl_kernel dtanh;
 
-    private long[] localWorkSize = new long[]{32};
+    private final static float LEAKYRELUCONST = 0.001f;
+    
+    
 
     /**
      * Creates a new convolution kernel.
@@ -38,51 +40,56 @@ public class ActivationKernel extends OpenCLKernel {
     @Override
     public void init(cl_context context, cl_command_queue commandQueue) {
         super.init(context, commandQueue);
+        softmax = this.createKernel("softmax");
         sigmoid = this.createKernel("sigmoid");
         dsigmoid = this.createKernel("dsigmoid");
+        relu = this.createKernel("relu");
+        drelu = this.createKernel("drelu");
+        leakyrelu = this.createKernel("leakyrelu");
+        dleakyrelu = this.createKernel("dleakyrelu");
+        tanh = this.createKernel("a_tanh");
+        dtanh = this.createKernel("dtanh");
         super.releaseProgram();
     }
 
+    public void softmax(imatrix O){
+        applyKernel(softmax, O);
+    }
+    
     public void sigmoid(imatrix O) {
-        FloatDeviceBuffer db = O.getDeviceBuffer();
-        cl_mem memOutput = GPU.uploadRWMatrix(O);
-        clSetKernelArg(sigmoid, 0, Sizeof.cl_mem, Pointer.to(memOutput));
-
-        clEnqueueNDRangeKernel(
-                commandQueue,
-                sigmoid,
-                1,
-                null,
-                db.getGlobalWorkSize(),
-                this.localWorkSize,
-                0,
-                null,
-                null);
-
-        db.markRWMatrixAsMaster();
+        applyKernel(sigmoid, O);
     }
 
     public void dsigmoid(imatrix O) {
-        int[] oDim = O.getDeviceBuffer().getDeviceDimension();
-        cl_mem memOutput = GPU.uploadRWMatrix(O);
+        applyKernel(dsigmoid, O);
+    }
 
-        clSetKernelArg(dsigmoid, 0, Sizeof.cl_mem, Pointer.to(memOutput));
-        clSetKernelArg(dsigmoid, 1, Sizeof.cl_int2, Pointer.to(oDim));
+    public void relu(imatrix O) {
+        applyKernel(relu, O);
+    }
 
-        long globalSize[] = new long[]{oDim[0], oDim[1]};
-        long localSize[] = new long[]{32, 32};
+    public void drelu(imatrix O) {
+        applyKernel(drelu, O);
+    }
 
-        clEnqueueNDRangeKernel(
-                commandQueue,
-                dsigmoid,
-                2,
-                null,
-                globalSize,
-                localSize,
-                0,
-                null,
-                null);
+    public void leakyrelu(imatrix O) {
+        applyKernel(leakyrelu, O, LEAKYRELUCONST);
+    }
 
-        GPU.downloadRWMatrix(O);
+    public void dleakyrelu(imatrix O) {
+        applyKernel(dleakyrelu, O, LEAKYRELUCONST);
+    }
+
+    public void tanh(imatrix O) {
+        applyKernel(tanh, O);
+    }
+
+    public void dtanh(imatrix O) {
+        applyKernel(dtanh, O);
+    }
+    
+    public void didentity(imatrix O) {
+        GPU.fillR(O,1.0f);
+        O.getDeviceBuffer().markRMatrixAsMaster();
     }
 }

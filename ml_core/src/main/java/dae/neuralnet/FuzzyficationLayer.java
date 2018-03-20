@@ -218,4 +218,13 @@ public class FuzzyficationLayer implements ILayer {
         System.out.println("weight analysis of " + this.name + " b weights");
         System.out.println(wa2);
     }
+    
+   /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    @Override
+    public void sync(){
+        aWeights.sync();
+        bWeights.sync();
+    }
 }

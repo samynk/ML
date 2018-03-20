@@ -4,8 +4,10 @@
  */
 package dae.matrix.op;
 
+import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
+import dae.neuralnet.activation.ActivationFunction;
 
 /**
  *
@@ -169,6 +171,24 @@ public interface FMatrixOp {
      * @return the result matrix
      */
     public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2);
+    
+    /**
+     * Multiplies every element of the op1 matrix with the given factor.
+     *
+     * @param result the matrix to store the result.
+     * @param op1 the matrix to multiply with the factor.
+     * @param factor the factor to multipy the matrix with.
+     * @return the result matrix
+     */
+    public imatrix dotmultiply(imatrix result, imatrix op1, float factor);
+    
+    /**
+     * Squares the matrix.
+     * 
+     * @param op1 the matrix to square.
+     * @return the squared matrix.
+     */
+    public imatrix square(imatrix op1);
 
     /**
      * Copies one matrix into another matrix. The number of rows,columns slices
@@ -179,4 +199,60 @@ public interface FMatrixOp {
      * @param dest the destination matrix.
      */
     public void copyInto(imatrix toCopy, imatrix dest);
+    
+    /**
+     * Applies the activation function on the given matrix.
+     * @param function the function that defines the derived activation function.
+     * @param m the matrix to apply the activation function to.
+     */
+    public void applyActivation(ActivationFunction function, fmatrix m) ;
+    
+    /**
+     * Applies the derived activation function on the give matrix.
+     * @param function the function that defines the derived activation function.
+     * @param m the matrix to apply the activation function to.
+     */
+    public void applyDerivedActivation(ActivationFunction function, fmatrix m) ;
+
+    /**
+     * Resets a matrix to zero.
+     * @param m the matrix to reset.
+     */
+    public void reset(fmatrix m);
+    
+    /**
+     * Randomizes a matrix between the given bound.
+     * @param m the matrix to randomize.
+     * @param min the minimum for the random float.
+     * @param max the maximum for the random float.
+     */
+    public void randomize(imatrix m, float min, float max);
+    
+    /**
+     * Calculates the new velocity in the adam algorithm by
+     * applying the following formula to every cell in the matrix:
+     * 
+     * newVelocity = beta2*previousVelocity + (1-beta2) * gradient^2
+     * @param result the imatrix to store the result in.
+     * @param beta2 the beta2 factor of the algorithm.
+     * @param previousVelocity the previous velocity matrix.
+     * @param gradient the current gradient.
+     * @return the resulting updated matrix.
+     */
+    public imatrix adamVelocity(imatrix result, float beta2, imatrix previousVelocity, imatrix gradient);
+    
+    /**
+     * Adapts the weights according to the adam gradient descent algorithm. The bias correction
+     * will be applied in place.
+     * 
+     * @param weights the current weights.
+     * @param eta the learning rate.
+     * @param beta1 the beta1 value.
+     * @param beta2 the beta2 value.
+     * @param epsilon the epsilon value.
+     * @param moment the current moment.
+     * @param velocity the current velocity.
+     * @return 
+     */
+    public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) ;
 }

@@ -137,4 +137,9 @@ public interface ILayer {
      * @param file the file location to write to.
      */
     public void writeOutputImage(String file);
+    
+    /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    public void sync();
 }

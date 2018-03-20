@@ -352,4 +352,11 @@ public class ConvolutionLayer implements ILayer {
         System.out.println(wa);
     }
 
+    /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    @Override
+    public void sync(){
+        this.weights.sync();
+    }
 }

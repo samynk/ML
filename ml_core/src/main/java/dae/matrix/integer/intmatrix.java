@@ -5,10 +5,10 @@
 package dae.matrix.integer;
 
 import dae.matrix.gpu.IntDeviceBuffer;
-import dae.matrix.gpu.IntMatrixOpGpu;
+import dae.neuralnet.activation.Function;
 import java.nio.IntBuffer;
+import java.util.Random;
 import org.jocl.Pointer;
-import org.jocl.cl_mem;
 
 /**
  *
@@ -98,6 +98,20 @@ public class intmatrix {
         while (this.data.hasRemaining()) {
             this.data.put(toCopy.data.get());
         }
+    }
+    
+    
+    public void applyFunction(IntFunction f) {
+        for (int i = 0; i < data.limit(); ++i) {
+            int v = data.get(i);
+            int vf = f.evaluate(v);
+            data.put(i, vf);
+        }
+    }
+    
+     public void randomize(int min, int max) {
+        Random r = new Random(System.currentTimeMillis());
+        this.applyFunction(x -> r.nextInt(max - min) + min);
     }
     
     /**
@@ -300,7 +314,7 @@ public class intmatrix {
      * @return the number of slices.
      */
     public int getNrOfHyperSlices() {
-        return slices;
+        return hyperslices;
     }
 
     /**

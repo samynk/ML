@@ -70,15 +70,21 @@ public abstract class AbstractLayer implements ILayer {
         this.batchSize = batchSize;
 
         n = nrOfInputs + nrOfBiases;
-        this.inputs = new fmatrix(1, n, 1, batchSize);
+        this.inputs = new fmatrix(n, 1, 1, batchSize);
+        // set biases to one.
+        for (int h = 0; h < batchSize; ++h) {
+            for (int i = nrOfInputs; i < n; i++) {
+                this.inputs.set(i, 0, 0, h, 1);
+            }
+        }
         this.tinputs = new tmatrix(this.inputs);
 
-        this.deltas = new fmatrix(1, nrOfOutputs, 1, batchSize);
-        this.derivatives = new fmatrix(1, nrOfOutputs, 1, batchSize);
+        this.deltas = new fmatrix(nrOfOutputs, 1, 1, batchSize);
+        this.derivatives = new fmatrix(nrOfOutputs, 1, 1, batchSize);
 
-        this.outputs = new fmatrix(1, nrOfOutputs, 1, batchSize);
-        this.errors = new fmatrix(1, nrOfOutputs, 1, batchSize);
-        this.ideal = new fmatrix(1, nrOfOutputs, 1, batchSize);
+        this.outputs = new fmatrix(nrOfOutputs, 1, 1, batchSize);
+        this.errors = new fmatrix(nrOfOutputs, 1, 1, batchSize);
+        this.ideal = new fmatrix(nrOfOutputs, 1, 1, batchSize);
 
         function = af;
         activation = af.getActivation();
@@ -187,16 +193,7 @@ public abstract class AbstractLayer implements ILayer {
      */
     @Override
     public void setInputs(imatrix inputs) {
-        if (inputs.isRowVector()) {
-            fmatrix.copyInto(inputs, this.inputs);
-        } else {
-            fmatrix.matrixToRowVector(inputs, this.inputs);
-        }
-        for (int i = nrOfInputs; i < n; i++) {
-            for (int r = 0; r < this.inputs.getNrOfRows(); ++r) {
-                this.inputs.set(r, i, 1);
-            }
-        }
+        fmatrix.copyInto(inputs, this.inputs);
     }
 
     /**
@@ -220,6 +217,8 @@ public abstract class AbstractLayer implements ILayer {
 
     /**
      * Returns the target matrix.
+     *
+     * @return the target of the neural network.
      */
     public imatrix getIdeal() {
         return this.ideal;
@@ -248,11 +247,10 @@ public abstract class AbstractLayer implements ILayer {
         // 1.a copy the outputs into the derivatives matrix.
         fmatrix.copyInto(this.outputs, this.derivatives);
         // 1.b apply the derivative of the activation function to the output.
-        derivatives.applyFunction(this.derivedActivation);
+        fmatrix.applyDerivedActivation(this.function, derivatives);
 
         // 2. multiply the derivatives with the errors.
         fmatrix.dotmultiply(deltas, errors, derivatives);
-
         // 3. Calculate the new weights
         calculateNewWeights(learningRate);
     }

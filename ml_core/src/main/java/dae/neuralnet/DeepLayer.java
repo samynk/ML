@@ -200,11 +200,11 @@ public class DeepLayer {
             }
         }
 
-        if (mode == TrainingMode.STOCHASTIC) {
+        //if (mode == TrainingMode.STOCHASTIC) {
             for (int i = 0; i < layers.length; ++i) {
-                layers[i].adaptWeights(1);
+                layers[i].adaptWeights(this.learningRate.getLearningRate(iteration));
             }
-        }
+        //}
     }
 
     public void adaptWeights(int iteration, int batchSize) {
@@ -274,8 +274,14 @@ public class DeepLayer {
     }
 
     public void analyzeWeights() {
-        for (ILayer l:this.layers){
+        for (ILayer l : this.layers) {
             l.analyzeWeights();
+        }
+    }
+
+    public void sync() {
+        for (ILayer l : this.layers) {
+            l.sync();
         }
     }
 

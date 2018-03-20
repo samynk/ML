@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import static org.jocl.CL.*;
 import org.jocl.Pointer;
+import org.jocl.Sizeof;
 import org.jocl.cl_command_queue;
 import org.jocl.cl_context;
 import org.jocl.cl_kernel;
@@ -22,13 +23,19 @@ import org.jocl.cl_program;
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
 public class OpenCLKernel {
-
+    public static final int DEFAULTWORKSIZE = 1024;
+    
+    
     private final String kernelFile;
     private final String kernelSource;
 
     protected cl_command_queue commandQueue;
     protected cl_context context;
     private cl_program program;
+    
+    private final long[] eGWS = new long[1];
+    private final long[] eLWS = new long[1];
+    private final long[] localWorkSize = new long[]{DEFAULTWORKSIZE};
 
     /**
      *
@@ -92,5 +99,52 @@ public class OpenCLKernel {
 
     public void destroy() {
 
+    }
+
+    protected void applyKernel(cl_kernel kernel, imatrix O) {
+        FloatDeviceBuffer db = O.getDeviceBuffer();
+        cl_mem memOutput = db.uploadRWMatrix();
+        clSetKernelArg(kernel, 0, Sizeof.cl_mem, Pointer.to(memOutput));
+        long workSize = db.getGlobalWorkSize()[0];
+        long localSize = localWorkSize[0];
+        // divide worksize by 4 because activation kernels use float4
+        // to speed up operations.
+        eGWS[0] = workSize / 4;
+        if (eGWS[0] < localSize) {
+            localSize = eGWS[0];
+        } else if (eGWS[0] % localSize != 0) {
+            do {
+                localSize >>= 1;
+            } while (eGWS[0] % localSize != 0);
+        }
+        eLWS[0] = localSize;
+        clEnqueueNDRangeKernel(commandQueue, kernel, 1, null, eGWS, eLWS, 0, null, null);
+        db.markRWMatrixAsMaster();
+    }
+    
+    protected void applyKernel(cl_kernel kernel, intmatrix O) {
+        IntDeviceBuffer db = O.getDeviceBuffer();
+        cl_mem memOutput = db.uploadRWMatrix();
+        clSetKernelArg(kernel, 0, Sizeof.cl_mem, Pointer.to(memOutput));
+        long workSize = db.getGlobalWorkSize()[0];
+        long localSize = localWorkSize[0];
+        // divide worksize by 4 because activation kernels use float4
+        // to speed up operations.
+        eGWS[0] = workSize / 4;
+        if (eGWS[0] < localSize) {
+            localSize = eGWS[0];
+        } else if (eGWS[0] % localSize != 0) {
+            do {
+                localSize >>= 1;
+            } while (eGWS[0] % localSize != 0);
+        }
+        eLWS[0] = localSize;
+        clEnqueueNDRangeKernel(commandQueue, kernel, 1, null, eGWS, eLWS, 0, null, null);
+        db.markRWMatrixAsMaster();
+    }
+
+    protected void applyKernel(cl_kernel kernel, imatrix O, float kernelArg1) {
+        clSetKernelArg(kernel, 1, Sizeof.cl_float, Pointer.to(new float[]{kernelArg1}));
+        applyKernel(kernel, O);
     }
 }

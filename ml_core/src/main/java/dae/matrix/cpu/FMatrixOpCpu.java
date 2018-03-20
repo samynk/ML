@@ -4,11 +4,13 @@
  */
 package dae.matrix.cpu;
 
+import dae.matrix.fmatrix;
 import static dae.matrix.fmatrix.equalDimension;
 import dae.matrix.gpu.GPU;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
+import dae.neuralnet.activation.ActivationFunction;
 import java.nio.FloatBuffer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -305,7 +307,7 @@ public class FMatrixOpCpu implements FMatrixOp {
     public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix functions) {
         for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
             float iv = input.get(0, ic);
-            for (int oc = 0; oc < functions.getNrOfColumns() ; ++oc) {
+            for (int oc = 0; oc < functions.getNrOfColumns(); ++oc) {
                 float av = a.get(ic, oc);
                 float bv = b.get(ic, oc);
 
@@ -313,6 +315,30 @@ public class FMatrixOpCpu implements FMatrixOp {
                 functions.set(ic, oc, v);
             }
         }
+    }
+
+    /**
+     * Applies the activation function on the given matrix.
+     *
+     * @param function the function that defines the derived activation
+     * function.
+     * @param m the matrix to apply the activation function to.
+     */
+    @Override
+    public void applyActivation(ActivationFunction function, fmatrix m) {
+        m.applyFunction(function.getActivation());
+    }
+
+    /**
+     * Applies the derived activation function on the give matrix.
+     *
+     * @param function the function that defines the derived activation
+     * function.
+     * @param m the matrix to apply the activation function to.
+     */
+    @Override
+    public void applyDerivedActivation(ActivationFunction function, fmatrix m) {
+        m.applyFunction(function.getDerivedActivation());
     }
 
     /**
@@ -347,12 +373,14 @@ public class FMatrixOpCpu implements FMatrixOp {
      */
     @Override
     public imatrix dotadd(imatrix result, imatrix op1, imatrix op2) {
-        for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
-            for (int row = 0; row < result.getNrOfRows(); ++row) {
-                for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                    float op1value = op1.get(row, column, slice);
-                    float op2value = op2.get(row, column, slice);
-                    result.set(row, column, slice, op1value + op2value);
+        for (int h = 0; h < result.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float op1value = op1.get(row, column, slice, h);
+                        float op2value = op2.get(row, column, slice, h);
+                        result.set(row, column, slice, op1value + op2value);
+                    }
                 }
             }
         }
@@ -372,12 +400,14 @@ public class FMatrixOpCpu implements FMatrixOp {
      */
     @Override
     public imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2) {
-        for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
-            for (int row = 0; row < result.getNrOfRows(); ++row) {
-                for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                    float op1value = op1.get(row, column, slice);
-                    float op2value = op2.get(row, column, slice);
-                    result.set(row, column, slice, factor1 * op1value + factor2 * op2value);
+        for (int h = 0; h < result.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float op1value = op1.get(row, column, slice, h);
+                        float op2value = op2.get(row, column, slice, h);
+                        result.set(row, column, slice, factor1 * op1value + factor2 * op2value);
+                    }
                 }
             }
         }
@@ -394,12 +424,14 @@ public class FMatrixOpCpu implements FMatrixOp {
      */
     @Override
     public imatrix dotsubtract(imatrix result, imatrix op1, imatrix op2) {
-        for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
-            for (int row = 0; row < result.getNrOfRows(); ++row) {
-                for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                    float op1value = op1.get(row, column, slice);
-                    float op2value = op2.get(row, column, slice);
-                    result.set(row, column, slice, op1value - op2value);
+        for (int h = 0; h < result.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float op1value = op1.get(row, column, slice, h);
+                        float op2value = op2.get(row, column, slice, h);
+                        result.set(row, column, slice, op1value - op2value);
+                    }
                 }
             }
         }
@@ -416,16 +448,129 @@ public class FMatrixOpCpu implements FMatrixOp {
      */
     @Override
     public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2) {
-        for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
-            for (int row = 0; row < result.getNrOfRows(); ++row) {
-                for (int column = 0; column < result.getNrOfColumns(); ++column) {
-                    float op1value = op1.get(row, column, slice);
-                    float op2value = op2.get(row, column, slice);
-                    result.set(row, column, slice, op1value * op2value);
+        for (int hyperslice = 0; hyperslice < result.getNrOfHyperSlices(); ++hyperslice) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float op1value = op1.get(row, column, slice, hyperslice);
+                        float op2value = op2.get(row, column, slice, hyperslice);
+                        result.set(row, column, slice, hyperslice, op1value * op2value);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Multiplies every element of the op1 matrix with the given factor.
+     *
+     * @param result the matrix to store the result.
+     * @param op1 the matrix to multiply with the factor.
+     * @param factor the factor to multipy the matrix with.
+     * @return the result matrix
+     */
+    @Override
+    public imatrix dotmultiply(imatrix result, imatrix op1, float factor) {
+        for (int hyperslice = 0; hyperslice < result.getNrOfHyperSlices(); ++hyperslice) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float op1value = op1.get(row, column, slice, hyperslice);
+                        result.set(row, column, slice, hyperslice, op1value * factor);
+                    }
                 }
             }
         }
         return result;
+    }
+
+    /**
+     * Squares the matrix.
+     *
+     * @param op1 the matrix to square.
+     * @return the squared matrix (for chaining purposes).
+     */
+    @Override
+    public imatrix square(imatrix op1) {
+        op1.applyFunction(x -> x * x);
+        return op1;
+    }
+
+    /**
+     * Calculates the new velocity in the adam algorithm by applying the
+     * following formula to every cell in the matrix:
+     *
+     * newVelocity = beta2*previousVelocity + (1-beta2) * gradient^2
+     *
+     * @param result the imatrix to store the result in.
+     * @param beta2 the beta2 factor of the algorithm.
+     * @param previousVelocity the previous velocity matrix.
+     * @param gradient the current gradient.
+     * @return the resulting updated matrix.
+     */
+    @Override
+    public imatrix adamVelocity(imatrix result, float beta2, imatrix previousVelocity, imatrix gradient) {
+        for (int hyperslice = 0; hyperslice < result.getNrOfHyperSlices(); ++hyperslice) {
+            for (int slice = 0; slice < result.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < result.getNrOfRows(); ++row) {
+                    for (int column = 0; column < result.getNrOfColumns(); ++column) {
+                        float v = previousVelocity.get(row, column, slice, hyperslice);
+                        float g = gradient.get(row, column, slice, hyperslice);
+                        result.set(row, column, slice, hyperslice, beta2 * v + (1 - beta2) * g * g);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Adapts the weights according to the adam gradient descent algorithm. The
+     * bias correction will be applied in place.
+     *
+     * @param weights the current weights.
+     * @param eta the learning rate.
+     * @param beta1 the beta1 value.
+     * @param beta2 the beta2 value.
+     * @param epsilon the epsilon value.
+     * @param moment the current moment.
+     * @param velocity the current velocity.
+     * @return
+     */
+    @Override
+    public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
+        float invOneMinusBeta1 = 1 / (1 - beta1);
+        float invOneMinusBeta2 = 1 / (1 - beta2);
+
+        for (int hyperslice = 0; hyperslice < weights.getNrOfHyperSlices(); ++hyperslice) {
+            for (int slice = 0; slice < weights.getNrOfSlices(); ++slice) {
+                for (int row = 0; row < weights.getNrOfRows(); ++row) {
+                    for (int column = 0; column < weights.getNrOfColumns(); ++column) {
+                        float v = velocity.get(row, column, slice, hyperslice);
+                        float m = moment.get(row, column, slice, hyperslice);
+                        float w = weights.get(row, column, slice, hyperslice);
+                        float newW = w - (eta * m *  invOneMinusBeta1 ) / ( (float)(Math.sqrt(v*invOneMinusBeta2)) + epsilon); 
+                        weights.set(row, column, slice, hyperslice, newW);
+                    }
+                }
+            }
+        }
+        return weights;
+    }
+
+    /**
+     * Randomizes a matrix between the given bound.
+     *
+     * @param m the matrix to randomize.
+     * @param min the minimum for the random float.
+     * @param max the maximum for the random float.
+     */
+    @Override
+    public void randomize(imatrix m, float min, float max) {
+
     }
 
     @Override
@@ -466,6 +611,11 @@ public class FMatrixOpCpu implements FMatrixOp {
                 }
             }
         }
+    }
+
+    @Override
+    public void reset(fmatrix m) {
+        m.applyFunction(x -> 0);
     }
 
 }

@@ -5,7 +5,6 @@
 package dae.matrix.gpu;
 
 import dae.matrix.BufferSyncState;
-import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import org.jocl.CL;
 import org.jocl.Pointer;
@@ -25,7 +24,7 @@ public class IntDeviceBuffer {
     private int padding;
     private int deviceSize;
     private final long[] globalWorkSize = new long[1];
-    private static final int LOCALSIZE = 32;
+    private static final int LOCALSIZE = OpenCLKernel.DEFAULTWORKSIZE;
 
     private BufferSyncState cpuBufferState = BufferSyncState.UPTODATE;
     private BufferSyncState rGPUBufferState = BufferSyncState.OUTOFDATE;
@@ -56,7 +55,7 @@ public class IntDeviceBuffer {
 
         padding = LOCALSIZE - (totalSize % LOCALSIZE);
         globalWorkSize[0] = (totalSize + padding);
-        
+
         deviceSize = (totalSize + padding) * Sizeof.cl_int;
 
         hostRegion[0] = cpuBuffer.getNrOfRows() * Sizeof.cl_int;
@@ -165,6 +164,21 @@ public class IntDeviceBuffer {
         return rmem;
     }
 
+    public cl_mem uploadRWMatrix() {
+        cl_mem rmem = getRWMem();
+        if (rwGPUBufferState == BufferSyncState.OUTOFDATE) {
+            // first try to copy on the device itself.
+            if (rGPUBufferState == BufferSyncState.UPTODATE) {
+                GPU.copyRBuffer(cpuBuffer);
+                rwGPUBufferState = BufferSyncState.UPTODATE;
+            } else {
+                GPU.uploadRWMatrix(cpuBuffer);
+                rwGPUBufferState = BufferSyncState.UPTODATE;
+            }
+        }
+        return rmem;
+    }
+
     public void downloadMatrix() {
         if (cpuBufferState == BufferSyncState.OUTOFDATE) {
             if (rGPUBufferState == BufferSyncState.UPTODATE) {
@@ -267,4 +281,5 @@ public class IntDeviceBuffer {
         this.rGPUBufferState = BufferSyncState.UPTODATE;
         this.rwGPUBufferState = BufferSyncState.OUTOFDATE;
     }
+
 }

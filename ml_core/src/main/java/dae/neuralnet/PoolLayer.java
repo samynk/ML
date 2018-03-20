@@ -8,7 +8,6 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import dae.neuralnet.activation.ActivationFunction;
-import dae.neuralnet.cost.CostFunction;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -216,6 +215,14 @@ public class PoolLayer implements ILayer {
     @Override
     public void analyzeWeights() {
         System.out.println("No weights to analyze " + this.getName());
+    }
+    
+    /**
+     * Syncs the matrices with the matrices on the gpu.
+     */
+    @Override
+    public void sync() {
+        // nothing to sync.
     }
 
 }

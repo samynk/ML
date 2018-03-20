@@ -25,6 +25,15 @@ public interface imatrix {
     public boolean isRowVector();
 
     /**
+     * Checks if this matrix is a batch matrix, in other words it is a multiple
+     * of a row vector.
+     *
+     * @return true if this matrix is a row vector with a number of hyperslices
+     * that is bigger than 1.
+     */
+    public boolean isBatchMatrix();
+
+    /**
      * Sets a cell in this matrix to the given value.
      *
      * @param row the row to set.
@@ -61,6 +70,11 @@ public interface imatrix {
      * @param values the new row values in the matrix.
      */
     public void setRow(int row, float[] values);
+
+    /**
+     * Resets all the values in the matrix to zero.
+     */
+    public void reset();
 
     /**
      * Stores a row of this matrix into the provided fmatrix storage.
@@ -261,10 +275,15 @@ public interface imatrix {
      * @return the DeviceBuffer object.
      */
     public FloatDeviceBuffer getDeviceBuffer();
-    
+
     /**
      * Synchronizes the host buffer with the device buffer if necessary.
      */
     public void sync();
+
+    /**
+     * Make the cpu buffer the most current.
+     */
+    public void makeMaster();
 
 }
