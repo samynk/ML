@@ -222,13 +222,14 @@ public class Layer extends AbstractLayer {
      * @param errors the error matrix with dimension (batchSize x nrOfInputs).
      */
     @Override
-    public void calculateErrors(fmatrix errors) {
+    public void calculateErrors(imatrix errors) {
         // errors.reset();
         imatrix t = weights;
         if (dropRateSet) {
             t = dropWeightMatrix;
         }
         fmatrix.sgemm(1, t, deltas, 0, errors);
+        errors.sync();
         //fmatrix.multiply(deltas, this.deltas, this.tweights);
     }
 

@@ -169,6 +169,11 @@ public class tmatrix implements imatrix {
     public int getSliceSize() {
         return source.getSliceSize();
     }
+    
+    @Override
+    public int getHyperSliceSize() {
+        return source.getHyperSliceSize();
+    }
 
     /**
      * Returns the number of cells in one slice of this matrix.
@@ -263,5 +268,4 @@ public class tmatrix implements imatrix {
     public String toString() {
         return fmatrix.print(this);
     }
-
 }

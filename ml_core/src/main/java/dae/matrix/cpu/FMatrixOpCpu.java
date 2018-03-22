@@ -210,14 +210,13 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param maskLayer a matrix with the same dimension as the input layer
      * which can be used to determine which input pixels contributed to the
      * output.
+     * @param scaleX the x-scale of the pool layer.
+     * @param scaleY the y-scale of the pool layer.
      * @param output the output matrix.
      *
      */
     @Override
-    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
-        int scaleX = output.getNrOfColumns() / input.getNrOfColumns();
-        int scaleY = output.getNrOfRows() / input.getNrOfRows();
-
+    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
 
         for (int slice = 0; slice < slices; ++slice) {
@@ -304,15 +303,124 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param functions the fuzzified input.
      */
     @Override
-    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix functions) {
-        for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
-            float iv = input.get(0, ic);
-            for (int oc = 0; oc < functions.getNrOfColumns(); ++oc) {
-                float av = a.get(ic, oc);
-                float bv = b.get(ic, oc);
+    public void fuzzyFunction(imatrix input, int classes, imatrix a, imatrix b, imatrix functions) {
+        int actualClasses = classes - 1;
+        for (int h = 0; h < input.getNrOfHyperSlices(); ++h) {
+            for (int ir = 0; ir < input.getNrOfRows(); ++ir) {
+                float iv = input.get(ir, 0, 0, h);
+                for (int oc = 0; oc < actualClasses; ++oc) {
+                    int index = ir * actualClasses + oc;
+                    float av = a.get(index, 0);
+                    float bv = b.get(index, 0);
 
-                float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
-                functions.set(ic, oc, v);
+                    float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
+                    functions.set(index, 0, 0, h, v);
+                }
+            }
+        }
+    }
+
+    /**
+     * Expands the elements of the input into the output with the following
+     * algorithm:
+     *
+     * o1 = 1-i1 o2 = i1-i2 o3 = i3-i2 ... on = i(n-1)
+     *
+     * This also means that for every classes-1 input elements an extra output
+     * element will be created.
+     *
+     * size(outputs) = classes * (size(inputs)/(classes-1))
+     *
+     * @param input the input matrix which is a row vector.
+     * @param output the output matrix which is also a row vector.
+     */
+    @Override
+    public void fuzzyShiftMinus(imatrix input, int classes, imatrix output) {
+        int numVars = input.getNrOfRows() / (classes - 1);
+        int hyperSlices = Math.min(input.getNrOfHyperSlices(), output.getNrOfHyperSlices());
+        for (int h = 0; h < hyperSlices; ++h) {
+            int oRow = 0;
+            for (int rv = 0; rv < numVars; ++rv) {
+                float previous = 1;
+                int iBase = rv * (classes - 1);
+                for (int ic = 0; ic < (classes - 1); ++ic) {
+                    float iv = input.get(iBase + ic, 0, 0, h);
+                    output.set(oRow++, 0, 0, h, previous - iv);
+                    previous = iv;
+                }
+                output.set(oRow++, 0, 0, h, previous);
+            }
+        }
+    }
+
+    /**
+     * Converts a one D vector into a 2D matrix with the following formula:
+     *
+     * nrOfVariables : input.rows / classes.
+     *
+     * The output is the a 2d matrix with dimensions : [nrOfVariables,classes-1]
+     *
+     * Per row of the output matrix the follow formula will be applied:
+     * output[currentRow] = [input1 - input0, input2 - input1, ...,
+     * input_classes-1 - input_classes_2]
+     *
+     * resulting in a row with (classes-1) elements.
+     *
+     * @param input the input matrix.
+     * @param classes the number of classes.
+     * @param output the 2D output matrix.
+     */
+    @Override
+    public void fuzzyShiftDeltas(imatrix input, int classes, imatrix output) {
+        int nrOfVariables = input.getNrOfRows() / classes;
+        for (int h = 0; h < input.getNrOfHyperSlices(); ++h) {
+            for (int v = 0; v < nrOfVariables; ++v) {
+                int iBase = v * classes;
+                int oBase = v * (classes - 1);
+                for (int c = 0; c < classes - 1; ++c) {
+                    float dn = input.get(iBase + c, 0, 0, h);
+                    float dnp1 = input.get(iBase + c + 1, 0, 0, h);
+
+                    output.set(oBase + c, 0, 0, h, dnp1 - dn);
+                }
+            }
+        }
+    }
+
+    /**
+     * Performs a back propagation into the deltas of the previous layer.
+     *
+     * @param input the deltas of the fuzzification layer, in batch.
+     * @param weights normally, the a-weights of the fuzzification layer.
+     * @param classes the number of classes in the fuzzification layer.
+     * @param output the output, in batch.
+     */
+    @Override
+    public void fuzzyBackProp(imatrix input, imatrix weights, int classes, imatrix output) {
+        for (int h = 0; h < input.getNrOfHyperSlices(); ++h) {
+            for (int r = 0; r < output.getNrOfRows(); ++r) {
+                float sum = 0;
+                int inputRow = r * (classes - 1);
+                for (int c = 0; c < classes - 1; ++c) {
+                    float w = weights.get(inputRow + c, 0, 0, 0);
+                    float i = input.get(inputRow + c, 0, 0, h);
+                    sum += w * i;
+                }
+                output.set(r, 0, 0, h, sum);
+            }
+        }
+    }
+
+    @Override
+    public void fuzzyInputAdd(imatrix inputs, imatrix weights, int classes, imatrix deltas) {
+        for (int h = 0; h < inputs.getNrOfHyperSlices(); ++h) {
+            for (int r = 0; r < inputs.getNrOfRows(); ++r) {
+                float iv = inputs.get(r, 0, 0, h);
+                for (int c = 0; c < (classes - 1); ++c) {
+                    int wdIndex = r * (classes - 1) + c;
+                    float current = weights.get(wdIndex, 0);
+                    deltas.set(wdIndex, 0, 0, h, current + iv);
+                }
             }
         }
     }
@@ -412,6 +520,24 @@ public class FMatrixOpCpu implements FMatrixOp {
             }
         }
         return result;
+    }
+
+    /**
+     * Calculates the sum per row and per hyperslice and stores the sum into the
+     * corresponding row of the output matrix.
+     *
+     * @param input the input matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void sumPerRow(imatrix input, imatrix output) {
+        for (int r = 0; r < input.getNrOfRows(); ++r) {
+            float sum = 0f;
+            for (int h = 0; h < input.getNrOfHyperSlices(); ++h) {
+                sum += input.get(r, 0, 0, h);
+            }
+            output.set(r, 0, sum);
+        }
     }
 
     /**
@@ -552,7 +678,7 @@ public class FMatrixOpCpu implements FMatrixOp {
                         float v = velocity.get(row, column, slice, hyperslice);
                         float m = moment.get(row, column, slice, hyperslice);
                         float w = weights.get(row, column, slice, hyperslice);
-                        float newW = w - (eta * m *  invOneMinusBeta1 ) / ( (float)(Math.sqrt(v*invOneMinusBeta2)) + epsilon); 
+                        float newW = w - (eta * m * invOneMinusBeta1) / ((float) (Math.sqrt(v * invOneMinusBeta2)) + epsilon);
                         weights.set(row, column, slice, hyperslice, newW);
                     }
                 }
@@ -610,6 +736,31 @@ public class FMatrixOpCpu implements FMatrixOp {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Copies a matrix into another matrix. The slice sizes are compared and if
+     * the slice size is the same, the slices will be copied regardless of the
+     * rows and columns of the two matrices.
+     *
+     * This function can be used to copy a column vector into a 2D matrix for
+     * example.
+     *
+     * @param src the matrix to copy.
+     * @param dst the destination matrix.
+     */
+    @Override
+    public void copyIntoSlice(imatrix src, imatrix dst) {
+        if (src.getSliceSize() == dst.getSliceSize()) {
+            int srcSlices = src.getNrOfSlices() * src.getNrOfHyperSlices();
+            int dstSlices = dst.getNrOfSlices() * dst.getNrOfHyperSlices();
+            int floatsToCopy = Math.min(srcSlices, dstSlices) * src.getSliceSize();
+            float[] arrSrc = src.getHostData().array();
+            float[] arrDst = dst.getHostData().array();
+            System.arraycopy(arrSrc, 0, arrDst, 0, floatsToCopy);
+        }else{
+            copyInto(src,dst);
         }
     }
 

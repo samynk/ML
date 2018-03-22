@@ -9,6 +9,7 @@ import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.cost.CrossEntropyCostFunction;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
+import java.awt.image.BufferedImage;
 import java.util.Random;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -21,14 +22,14 @@ import static org.junit.Assert.*;
  *
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
-public class TestSingleLayerDigitRecognition {
+public class TestThreeLayerDigitRecognition {
 
-    private static final int TRAIN_ITERATIONS = 6000;
+    private static final int TRAIN_ITERATIONS = 200000;
     private static final int TEST_ITERATIONS = -1;
     private static final int BATCHSIZE = 100;
-    private static final float LEARNING_RATE = .1f;
+    private static final float LEARNING_RATE = 0.2f;
 
-    public TestSingleLayerDigitRecognition() {
+    public TestThreeLayerDigitRecognition() {
     }
 
     @BeforeClass
@@ -57,10 +58,18 @@ public class TestSingleLayerDigitRecognition {
         fmatrix trainSetLabels = blr.getResult();
         System.out.println(trainSetLabels.getSizeAsString());
 
-        AbstractLayer layer1 = new Layer(784, 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
-        layer1.setName("final_layer");
+        AbstractLayer layer1 = new Layer(784, 1, 500, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer1.setName("first_layer");
+
+        AbstractLayer layer2 = new Layer(500, 1, 500, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer2.setName("second_layer");
+        
+        AbstractLayer layer3 = new Layer(500, 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
+        layer2.setName("third_layer");
+        
+        
         LearningRate lrd = new LearningRateConst(LEARNING_RATE / BATCHSIZE);
-        DeepLayer dl = new DeepLayer(lrd, layer1);
+        DeepLayer dl = new DeepLayer(lrd, layer1, layer2, layer3);
         dl.setCostFunction(new CrossEntropyCostFunction());
         Random r = new Random(System.currentTimeMillis());
         dl.randomizeWeights(r, -.1f, .1f);
@@ -72,6 +81,7 @@ public class TestSingleLayerDigitRecognition {
         String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
         System.out.println(image.getSizeAsString());
         for (int i = 0; i < TRAIN_ITERATIONS; ++i) {
+            // target.applyFunction(x -> 0);
             for (int b = 0; b < BATCHSIZE; ++b) {
                 int nextImage = r.nextInt(maxImage);
                 images.getHyperSlice(nextImage, b, image);
@@ -86,5 +96,6 @@ public class TestSingleLayerDigitRecognition {
         dl.analyzeWeights();
         dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
         DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+ 
     }
 }

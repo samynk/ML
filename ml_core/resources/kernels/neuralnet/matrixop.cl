@@ -9,6 +9,26 @@ __kernel void dotadd(
     result[index] = op1[index] + op2[index];
 }
 
+
+__kernel void sumPerRow(
+    int2 dim,
+    __global float* input,
+    __global float* output
+)
+{
+    int nrOfInputSlices = dim.x;
+    int iHSliceSize = dim.y;
+    int row = get_global_id(0);
+    float sum =0;
+    for(int h =0; h <nrOfInputSlices; ++h)
+    {
+        int index = row + h * iHSliceSize;
+        sum += input[index];
+    }
+    output[row] = sum;
+}
+
+
 __kernel void dotaddlc(
     const float2 factors,
     const __global float* op1,

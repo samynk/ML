@@ -88,7 +88,7 @@ public class ConvolvKernel extends OpenCLKernel {
         int[] ps = new int[]{stride};
         int[] fps = new int[]{filter.getNrOfSlices() / input.getNrOfSlices()};
 
-        GPU.zeroFillR(input);
+       
         cl_mem memInput = inputDB.uploadRMatrix();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();

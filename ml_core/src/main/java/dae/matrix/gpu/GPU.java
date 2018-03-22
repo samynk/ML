@@ -49,6 +49,7 @@ public class GPU {
     public static final ActivationKernel KERNEL_ACTIVATION;
     public static final PoolKernel KERNEL_POOL;
     public static final MatrixOpKernel KERNEL_MATRIX_OP;
+    public static final FuzzyKernel KERNEL_FUZZY;
 
     private static final long maxWorkItemSizes[];
 
@@ -108,6 +109,9 @@ public class GPU {
 
         KERNEL_MATRIX_OP = new MatrixOpKernel();
         KERNEL_MATRIX_OP.init(CL_CONTEXT, CL_COMMAND_QUEUE);
+
+        KERNEL_FUZZY = new FuzzyKernel();
+        KERNEL_FUZZY.init(CL_CONTEXT, CL_COMMAND_QUEUE);
 
         // CL_DEVICE_MAX_WORK_ITEM_SIZES
         maxWorkItemSizes = getSizes(device, CL_DEVICE_MAX_WORK_ITEM_SIZES, 3);
@@ -455,6 +459,44 @@ public class GPU {
             );
         }
         dbDst.markRMatrixAsMaster();
+    }
+
+    public static void enqueueCopySliceMatrix(imatrix src, imatrix dst) {
+        if (src.getHyperSliceSize() == dst.getHyperSliceSize()) {
+            FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
+            dbSrc.uploadRMatrix();
+            FloatDeviceBuffer dbDst = dst.getDeviceBuffer();
+
+            int deviceSize = Math.min(dbSrc.getDeviceSize(), dbDst.getDeviceSize());
+
+            if (dst.getZeroPadding() == 0)
+            {
+            clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                    dbSrc.getRMem(),
+                    dbDst.getRMem(),
+                    0, 0,
+                    deviceSize, 0, null, null
+            );
+            }else{
+                int numRows = dst.getNrOfRows();
+                int numCols = dst.getNrOfColumns();
+                int numSlices = dst.getNrOfSlices() * dst.getNrOfHyperSlices();
+                long region[] = new long[]{numRows * Float.BYTES, numCols, numSlices};
+                
+                clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                    dbSrc.getRMem(),
+                    dbDst.getRMem(),
+                    dbSrc.getDeviceOffset(),
+                    dbDst.getDeviceOffset(),
+                    region,
+                    numRows * Sizeof.cl_float, numRows* numCols*Sizeof.cl_float,
+                    dbDst.getDeviceRowPitch(), dbDst.getDeviceSlicePitch(),
+                    0, null, null);
+            }
+            dbDst.markRMatrixAsMaster();
+        } else {
+            enqueueCopyMatrix(src, dst);
+        }
     }
 
 }

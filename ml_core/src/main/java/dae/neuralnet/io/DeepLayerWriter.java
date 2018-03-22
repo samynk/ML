@@ -124,12 +124,13 @@ public class DeepLayerWriter {
     }
 
     private void writeLayers(DataOutputStream dos, DeepLayer dl) throws IOException {
+        int i = 0;
         for (ILayer l : dl.getLayers()) {
-            writeLayer(dos, l);
+            writeLayer(dos, l, i);
         }
     }
 
-    private void writeLayer(DataOutputStream dos, ILayer l) throws IOException {
+    private void writeLayer(DataOutputStream dos, ILayer l, int i) throws IOException {
         if (l instanceof Layer) {
             writeLayer(dos, (Layer) l);
         } else if (l instanceof ConvolutionLayer) {
@@ -145,18 +146,20 @@ public class DeepLayerWriter {
         dos.writeInt(LAYERNN);
         // nrofblocks
         if (l.isDropRateSet()) {
-            dos.writeInt(7);
+            dos.writeInt(8);
         } else {
-            dos.writeInt(6);
+            dos.writeInt(7);
         }
         dos.writeInt(LAYERNAME);
-        dos.writeUTF(l.getName());
+        dos.writeUTF(l.getName()!=null?l.getName():"");
         dos.writeInt(LAYERINPUTS);
         dos.writeInt(l.getNrOfInputs());
         dos.writeInt(LAYERBIASES);
         dos.writeInt(l.getNrOfBiases());
         dos.writeInt(LAYEROUTPUTS);
         dos.writeInt(l.getNrOfOutputs());
+        dos.writeInt(LAYERBATCHSIZE);
+        dos.writeInt(l.getBatchSize());
         if (l.isDropRateSet()) {
             dos.writeInt(LAYERDROPRATE);
             dos.writeFloat(l.getDropRate());
@@ -220,13 +223,15 @@ public class DeepLayerWriter {
     private void writeLayer(DataOutputStream dos, ConvolutionLayer l) throws IOException {
         dos.writeInt(LAYERCONVOLUTION);
         // nrofblocks
-        dos.writeInt(7);
+        dos.writeInt(8);
         dos.writeInt(LAYERNAME);
         dos.writeUTF(l.getName());
         dos.writeInt(LAYERINPUTDIMENSION);
         dos.writeInt(l.getNrOfWInputs());
         dos.writeInt(l.getNrOfHInputs());
         dos.writeInt(l.getNrOfSInputs());
+        dos.writeInt(LAYERBATCHSIZE);
+        dos.writeInt(l.getBatchSize());
         dos.writeInt(LAYERFEATURES);
         dos.writeInt(l.getNrOfFeatures());
         dos.writeInt(LAYERFILTERSIZE);
@@ -249,6 +254,8 @@ public class DeepLayerWriter {
         dos.writeInt(l.getNrofWInputs());
         dos.writeInt(l.getNrOfHInputs());
         dos.writeInt(l.getNrOfSInputs());
+        dos.writeInt(LAYERBATCHSIZE);
+        dos.writeInt(l.getBatchSize());
 
         dos.writeInt(LAYERFILTERSIZEX);
         dos.writeInt(l.getScaleX());
@@ -260,7 +267,7 @@ public class DeepLayerWriter {
     private void writeLayer(DataOutputStream dos, FuzzyficationLayer l) throws IOException {
         dos.writeInt(LAYERFUZZY);
         // nrofblocks
-        dos.writeInt(6);
+        dos.writeInt(7);
         dos.writeInt(LAYERNAME);
         dos.writeUTF(l.getName());
 
@@ -268,6 +275,8 @@ public class DeepLayerWriter {
         dos.writeInt(l.getNrOfInputs());
         dos.writeInt(LAYERFUZZYCLASSES);
         dos.writeInt(l.getNrOfClasses());
+        dos.writeInt(LAYERBATCHSIZE);
+        dos.writeInt(l.getBatchSize());
         dos.writeInt(ACTIVATIONFUNCTION);
         writeActivationFunction(l.getActivationFunction(), dos);
         dos.writeInt(LAYERWEIGHTSA);

@@ -42,7 +42,7 @@ public class PoolKernel extends OpenCLKernel {
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
         IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
-        
+
         int scaleX = input.getNrOfColumns() / output.getNrOfColumns();
         int scaleY = input.getNrOfRows() / output.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
@@ -72,17 +72,18 @@ public class PoolKernel extends OpenCLKernel {
         maskDB.markRWMatrixAsMaster();
     }
 
-    public void backpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
+    public void backpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         IntDeviceBuffer maskDB = maskLayer.getDeviceBuffer();
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
 
-        int scaleX = output.getNrOfColumns() / input.getNrOfColumns();
-        int scaleY = output.getNrOfRows() / input.getNrOfRows();
         int[] fDim = new int[]{scaleX, scaleY};
-        cl_mem memInput = GPU.uploadRMatrix(input);
+        cl_mem memInput = inputDB.uploadRMatrix();
         cl_mem memMask = maskDB.uploadRMatrix();
         cl_mem memOutput = outputDB.getRWMem();
+
+//        int[] iDim = inputDB.getDimensionSizes();
+//        int[] oDim = outputDB.getDimensionSizes();
 
         clSetKernelArg(bpMaxPool, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(bpMaxPool, 1, Sizeof.cl_mem, Pointer.to(memOutput));

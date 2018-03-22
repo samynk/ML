@@ -67,7 +67,7 @@ public interface ILayer {
      * @return the error matrix of this layer, with the result expressed as a 1
      * x nrOfOutputs matrix.
      */
-    public fmatrix getErrors();
+    public imatrix getErrors();
 
     /**
      * Returns the matrix with the outputs of this neural network layer, with
@@ -101,7 +101,7 @@ public interface ILayer {
      *
      * @param errors the deltas of the next layer.
      */
-    public void calculateErrors(fmatrix errors);
+    public void calculateErrors(imatrix errors);
 
     /**
      * Apply the changes in weights to the weight matrix.

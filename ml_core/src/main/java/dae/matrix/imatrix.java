@@ -182,6 +182,13 @@ public interface imatrix {
      * @return the total number of cells in the matrix.
      */
     public int getSliceSize();
+    
+       /**
+     * Returns the size of a hyper slice.
+     *
+     * @return the size of the hyper slice.
+     */
+    public int getHyperSliceSize() ;
 
     /**
      * Returns the total number of cells in this matrix.

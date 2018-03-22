@@ -61,14 +61,14 @@ public class DeepLayerRWTest {
             original.setName("firstlayer");
             original.randomizeWeights(r, -2, 2);
 
-            ConvolutionLayer oc = new ConvolutionLayer(6, 6, 1, 5, 5, 1, ActivationFunction.RELU);
+            ConvolutionLayer oc = new ConvolutionLayer(6, 6, 1, 5, 5, 1, 5, ActivationFunction.RELU);
             oc.setName("convolution1");
             oc.randomizeWeights(r, -5, 5);
 
-            PoolLayer op = new PoolLayer(6, 6, 5, 2, 2);
+            PoolLayer op = new PoolLayer(6, 6, 5, 2, 2, 5);
             op.setName("maxpool1");
 
-            FuzzyficationLayer fl = new FuzzyficationLayer(op.getNrOfOutputs(), 5);
+            FuzzyficationLayer fl = new FuzzyficationLayer(op.getNrOfOutputs(), 5, 1);
             fl.setName("fuzzy1");
             fl.randomizeWeights(r, .1f, 50);
 
@@ -119,12 +119,12 @@ public class DeepLayerRWTest {
             assertTrue(layer3 instanceof PoolLayer);
             PoolLayer rp = (PoolLayer) layer3;
             assertLayerEquals(op, rp);
-            
+
             // fourth layer
             ILayer layer4 = dl2.getLayer(3);
             assertNotNull(layer4);
             assertTrue(layer4 instanceof FuzzyficationLayer);
-            FuzzyficationLayer fr = (FuzzyficationLayer)layer4;
+            FuzzyficationLayer fr = (FuzzyficationLayer) layer4;
             assertLayerEquals(fl, fr);
 
         } catch (IOException ex) {

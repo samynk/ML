@@ -1,6 +1,7 @@
 package dae.neuralnet;
 
 import dae.matrix.fmatrix;
+import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
 import dae.matrix.zpmatrix;
 import dae.neuralnet.activation.ActivationFunction;
@@ -36,7 +37,10 @@ public class ConvolutionLayer implements ILayer {
      * The stride of the convolution layer.
      */
     private final int stride;
-
+    /**
+     * The batch size of the convolutional layer.
+     */
+    private final int batchSize;
     /**
      * The weight matrices
      */
@@ -63,6 +67,7 @@ public class ConvolutionLayer implements ILayer {
      * The errors of this layer.
      */
     private final fmatrix errors;
+    private final imatrix flatErrorView;
     /**
      * The deltas for this layer.
      */
@@ -93,10 +98,11 @@ public class ConvolutionLayer implements ILayer {
      * @param stride the stride to slide the filter with.
      * @param filter the size of filter. The total number of weights per
      * convolutional layer will be filter x filter.
+     * @param batchSize the batch size of the convolutional layer.
      * @param af the activation function.
      */
-    public ConvolutionLayer(int wInputs, int hInputs, int features, int filter, int stride, ActivationFunction af) {
-        this(wInputs, hInputs, 1, features, filter, stride, af);
+    public ConvolutionLayer(int wInputs, int hInputs, int features, int filter, int stride, int batchSize, ActivationFunction af) {
+        this(wInputs, hInputs, 1, features, filter, stride, batchSize, af);
     }
 
     /**
@@ -110,11 +116,12 @@ public class ConvolutionLayer implements ILayer {
      * @param stride the stride to slide the filter with.
      * @param filter the size of filter. The total number of weights per
      * convolutional layer will be filter x filter.
+     * @param batchSize the batch size of the convolutional layer.
      * @param af the activation function.
      */
-    public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, ActivationFunction af) {
+    public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, int batchSize, ActivationFunction af) {
         // filter weights are shared.
-        this(wInputs, hInputs, sInputs, features, filter, stride, af, new fmatrix(filter, filter, features));
+        this(wInputs, hInputs, sInputs, features, filter, stride, batchSize, af, new fmatrix(filter, filter, features));
     }
 
     /**
@@ -128,10 +135,11 @@ public class ConvolutionLayer implements ILayer {
      * @param stride the stride to slide the filter with.
      * @param filter the size of filter. The total number of weights per
      * convolutional layer will be filter x filter.
+     * @param batchSize the batch size of the convolutional layer.
      * @param af the activation function.
      * @param weights
      */
-    public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, ActivationFunction af, imatrix weights) {
+    public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, int batchSize, ActivationFunction af, imatrix weights) {
         // filter weights are shared.
 
         this.weights = weights;
@@ -143,21 +151,24 @@ public class ConvolutionLayer implements ILayer {
         this.stride = stride;
         this.features = features;
 
-        inputs = new fmatrix(wInputs, hInputs, sInputs, padding);
-        backpropErrors = new fmatrix(wInputs, hInputs, sInputs);
+        inputs = new fmatrix(wInputs, hInputs, sInputs, batchSize, padding);
+        backpropErrors = new fmatrix(wInputs, hInputs, sInputs, batchSize);
 
-        errors = new fmatrix(wInputs, hInputs, features);
+        errors = new fmatrix(wInputs, hInputs, features, batchSize);
+        flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
 
         int oR = 1 + (wInputs - filter + padding * 2) / stride;
         int oC = 1 + (hInputs - filter + padding * 2) / stride;
 
-        outputs = new fmatrix(oR, oC, features);
-        outputVector = new fmatrix(1, outputs.getSize());
-        deltas = new fmatrix(oR, oC, features);
+        outputs = new fmatrix(oR, oC, features, batchSize);
+        outputVector = new fmatrix(outputs.getHyperSliceSize(), 1, 1, batchSize);
+        deltas = new fmatrix(oR, oC, features, batchSize);
         zpDeltas = new zpmatrix(deltas, padding);
 
-        derivatives = new fmatrix(oR, oC, features);
+        derivatives = new fmatrix(oR, oC, features, batchSize);
         function = af;
+
+        this.batchSize = batchSize;
     }
 
     @Override
@@ -187,12 +198,12 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public int getNrOfInputs() {
-        return inputs.getSize();
+        return inputs.getSliceSize();
     }
 
     @Override
     public int getNrOfOutputs() {
-        return outputVector.getSize();
+        return outputVector.getSliceSize();
     }
 
     public int getNrOfFeatures() {
@@ -219,6 +230,10 @@ public class ConvolutionLayer implements ILayer {
         return this.stride;
     }
 
+    public int getBatchSize() {
+        return batchSize;
+    }
+
     public imatrix getWeights() {
         return this.weights;
     }
@@ -226,6 +241,7 @@ public class ConvolutionLayer implements ILayer {
     @Override
     public void forward() {
         fmatrix.batchConvolve(inputs, this.weights, stride, this.outputs);
+        
         switch (function) {
             case SOFTMAX:
                 fmatrix.softMaxPerRow(outputs);
@@ -233,39 +249,31 @@ public class ConvolutionLayer implements ILayer {
             default:
                 outputs.applyFunction(this.function.getActivation());
         }
-        fmatrix.matrixToRowVector(outputs, outputVector);
+        fmatrix.copyIntoSlice(outputs, outputVector);
     }
 
     @Override
     public void setInputs(imatrix input) {
-        if (fmatrix.equalDimension(input, this.inputs)) {
-            fmatrix.copyInto(input, this.inputs);
-        } else {
-            if (input.isRowVector()) {
-                fmatrix.rowVectorToMatrix(input, this.inputs);
-            }
-        }
+        fmatrix.copyIntoSlice(input, this.inputs);
     }
 
     @Override
     public void calculateNewWeights(float learningRate) {
         fmatrix.batchConvolve(inputs, deltas, this.stride, newWeights);
-        fmatrix.dotadd(batchWeights, batchWeights, newWeights);
     }
 
     @Override
-    public void calculateErrors(fmatrix errors) {
+    public void calculateErrors(imatrix errors) {
         // errors is a row vector.
         // do correlation into properly dimensioned and zeropadded
         // backpropErrors matrix.
         fmatrix.batchBackpropCorrelate(this.zpDeltas, this.weights, this.stride, backpropErrors);
-        fmatrix.matrixToRowVector(backpropErrors, errors);
+        fmatrix.copyIntoSlice(backpropErrors, errors);
     }
 
     @Override
     public void adaptWeights(float factor) {
-        fmatrix.dotadd(weights, 1, weights, -factor, batchWeights);
-        batchWeights.reset();
+        fmatrix.dotadd(weights, 1, weights, -factor, newWeights);
     }
 
     @Override
@@ -310,8 +318,9 @@ public class ConvolutionLayer implements ILayer {
         // in terms of the output of the activation function.
         // 2.a copy the outputs into the derivatives matrix.
         fmatrix.copyInto(this.outputs, this.derivatives);
+        
         // 2.b apply the derivative of the activation function to the output.
-        derivatives.applyFunction(function.getDerivedActivation());
+        fmatrix.applyDerivedActivation(function, derivatives);
 
         // 1. copy output - ideal (target) into deltas.
         // todo is it necessary to have a convolution layer as last layer?
@@ -336,8 +345,8 @@ public class ConvolutionLayer implements ILayer {
     }
 
     @Override
-    public fmatrix getErrors() {
-        return this.errors;
+    public imatrix getErrors() {
+        return this.flatErrorView;
     }
 
     @Override
@@ -356,7 +365,8 @@ public class ConvolutionLayer implements ILayer {
      * Syncs the matrices with the matrices on the gpu.
      */
     @Override
-    public void sync(){
+    public void sync() {
         this.weights.sync();
     }
+
 }

@@ -74,7 +74,7 @@ public class OpenCLKernel {
         this.context = context;
         this.commandQueue = commandQueue;
         program = clCreateProgramWithSource(context, 1, new String[]{kernelSource}, null, null);
-        String compileOptions = "-cl-mad-enable";
+        String compileOptions = "-cl-mad-enable -cl-std=CL2.0";
         clBuildProgram(program, 0, null, compileOptions, null, null);
     }
 

@@ -271,7 +271,7 @@ public abstract class AbstractLayer implements ILayer {
      * @param errors the deltas of the next layer.
      */
     @Override
-    public abstract void calculateErrors(fmatrix errors);
+    public abstract void calculateErrors(imatrix errors);
 
     /**
      * Apply the changes in weights to the weight matrix.

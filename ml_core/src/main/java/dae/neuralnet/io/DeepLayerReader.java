@@ -154,7 +154,7 @@ public class DeepLayerReader {
     private ILayer readLayerNN(DataInputStream dis) throws IOException {
         int nrOfBlocks = dis.readInt();
         String layerName = "nn";
-        int inputs = 0, biases = 0, outputs = 0;
+        int inputs = 0, biases = 0, outputs = 0, batchSize =1;
         boolean dropRateSet = false;
         float dropRate = 0.0f;
         ActivationFunction function = ActivationFunction.IDENTITY;
@@ -175,6 +175,9 @@ public class DeepLayerReader {
                 case LAYEROUTPUTS:
                     outputs = dis.readInt();
                     break;
+                case LAYERBATCHSIZE:
+                    batchSize = dis.readInt();
+                    break;
                 case LAYERDROPRATE:
                     dropRateSet = true;
                     dropRate = dis.readFloat();
@@ -188,7 +191,7 @@ public class DeepLayerReader {
                     break;
             }
         }
-        Layer l = new Layer(inputs, biases, outputs, 1, function, weights);
+        Layer l = new Layer(inputs, biases, outputs, batchSize, function, weights);
         l.setName(layerName);
         if (dropRateSet) {
             l.setDropRate(dropRate);
@@ -200,6 +203,7 @@ public class DeepLayerReader {
         int nrOfBlocks = dis.readInt();
         int wInputs = 0, hInputs = 0, sInputs = 0;
         int features = 0, filterSize = 0, filterStride = 0;
+        int batchSize = 1;
         String layerName = "convolution";
         ActivationFunction function = ActivationFunction.IDENTITY;
         imatrix weights = null;
@@ -214,6 +218,9 @@ public class DeepLayerReader {
                     wInputs = dis.readInt();
                     hInputs = dis.readInt();
                     sInputs = dis.readInt();
+                    break;
+                case LAYERBATCHSIZE:
+                    batchSize = dis.readInt();
                     break;
                 case LAYERFEATURES:
                     features = dis.readInt();
@@ -233,7 +240,7 @@ public class DeepLayerReader {
                     break;
             }
         }
-        ConvolutionLayer cl = new ConvolutionLayer(wInputs, hInputs, sInputs, features, filterSize, filterStride, function, weights);
+        ConvolutionLayer cl = new ConvolutionLayer(wInputs, hInputs, sInputs, features, filterSize, filterStride, batchSize, function, weights);
         cl.setName(layerName);
         return cl;
     }
@@ -242,6 +249,7 @@ public class DeepLayerReader {
         int nrOfBlocks = dis.readInt();
         int wInputs = 0, hInputs = 0, sInputs = 0;
         int scaleX = 0, scaleY = 0;
+        int batchSize = 1;
         String layerName = "convolution";
         ActivationFunction function = ActivationFunction.IDENTITY;
         imatrix weights = null;
@@ -257,6 +265,9 @@ public class DeepLayerReader {
                     hInputs = dis.readInt();
                     sInputs = dis.readInt();
                     break;
+                case LAYERBATCHSIZE:
+                    batchSize = dis.readInt();
+                    break;
                 case LAYERFILTERSIZEX:
                     scaleX = dis.readInt();
                     break;
@@ -265,7 +276,7 @@ public class DeepLayerReader {
                     break;
             }
         }
-        PoolLayer pl = new PoolLayer(wInputs, hInputs, sInputs, scaleX, scaleY);
+        PoolLayer pl = new PoolLayer(wInputs, hInputs, sInputs, scaleX, scaleY, batchSize);
         pl.setName(layerName);
         return pl;
     }
@@ -274,6 +285,7 @@ public class DeepLayerReader {
         String layerName = "fuzzy";
         int inputs = 0;
         int classes = 0;
+        int batchSize = 1;
         ActivationFunction function = ActivationFunction.IDENTITY;
         imatrix weightA = null;
         imatrix weightB = null;
@@ -286,6 +298,9 @@ public class DeepLayerReader {
                     break;
                 case LAYERINPUTS:
                     inputs = dis.readInt();
+                    break;
+                case LAYERBATCHSIZE:
+                    batchSize = dis.readInt();
                     break;
                 case LAYERFUZZYCLASSES:
                     classes = dis.readInt();
@@ -303,7 +318,7 @@ public class DeepLayerReader {
             }
         }
 
-        FuzzyficationLayer fl = new FuzzyficationLayer(inputs, classes, weightA, weightB);
+        FuzzyficationLayer fl = new FuzzyficationLayer(inputs, classes, batchSize, weightA, weightB, function);
         fl.setName(layerName);
         return fl;
     }

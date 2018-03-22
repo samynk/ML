@@ -9,6 +9,7 @@ import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.cost.CrossEntropyCostFunction;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
+import java.awt.image.BufferedImage;
 import java.util.Random;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -24,7 +25,7 @@ import static org.junit.Assert.*;
 public class TestTwoLayerDigitRecognition {
 
     private static final int TRAIN_ITERATIONS = 6000;
-    private static final int TEST_ITERATIONS = 1;
+    private static final int TEST_ITERATIONS = -1;
     private static final int BATCHSIZE = 100;
     private static final float LEARNING_RATE = 0.1f;
 
@@ -89,6 +90,7 @@ public class TestTwoLayerDigitRecognition {
         dl.sync();
         dl.analyzeWeights();
         dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
-        DigitRecognitionTester.testDigitRecognition(dl, 100, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+ 
     }
 }

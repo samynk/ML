@@ -5,6 +5,7 @@
 package dae.neuralnet;
 
 import dae.matrix.fmatrix;
+import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import dae.neuralnet.activation.ActivationFunction;
@@ -27,7 +28,9 @@ import javax.imageio.ImageIO;
 public class PoolLayer implements ILayer {
 
     private String name;
-    private int scaleX, scaleY;
+    private final int scaleX;
+    private final int scaleY;
+    private final int batchSize;
 
     private final fmatrix inputs;
     /**
@@ -44,15 +47,18 @@ public class PoolLayer implements ILayer {
      * The errors to back propagate in a previous layer.
      */
     private final fmatrix errors;
+    private final imatrix flatErrorView;
 
-    public PoolLayer(int iWidth, int iHeight, int iSlices, int scaleX, int scaleY) {
+    public PoolLayer(int iWidth, int iHeight, int iSlices, int scaleX, int scaleY, int batchSize) {
         this.scaleX = scaleX;
         this.scaleY = scaleY;
-        inputs = new fmatrix(iHeight, iWidth, iSlices);
-        maskLayer = new intmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
-        outputs = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
-        deltas = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices);
-        errors = new fmatrix(1, deltas.getSize());
+        inputs = new fmatrix(iHeight, iWidth, iSlices, batchSize);
+        maskLayer = new intmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
+        outputs = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
+        deltas = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
+        errors = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
+        flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
+        this.batchSize = batchSize;
     }
 
     /**
@@ -87,12 +93,12 @@ public class PoolLayer implements ILayer {
 
     @Override
     public int getNrOfInputs() {
-        return inputs.getSize();
+        return inputs.getHyperSliceSize();
     }
 
     @Override
     public int getNrOfOutputs() {
-        return outputs.getSize();
+        return outputs.getHyperSliceSize();
     }
 
     public int getNrofWInputs() {
@@ -115,6 +121,10 @@ public class PoolLayer implements ILayer {
         return scaleY;
     }
 
+    public int getBatchSize() {
+        return batchSize;
+    }
+
     @Override
     public void forward() {
         fmatrix.batchMaxPool(inputs, outputs, maskLayer);
@@ -122,13 +132,7 @@ public class PoolLayer implements ILayer {
 
     @Override
     public void setInputs(imatrix input) {
-        if (fmatrix.equalDimension(input, this.inputs)) {
-            fmatrix.copyInto(input, this.inputs);
-        } else {
-            if (input.isRowVector()) {
-                fmatrix.rowVectorToMatrix(input, this.inputs);
-            }
-        }
+        fmatrix.copyIntoSlice(input, this.inputs);
     }
 
     @Override
@@ -137,8 +141,8 @@ public class PoolLayer implements ILayer {
     }
 
     @Override
-    public fmatrix getErrors() {
-        return errors;
+    public imatrix getErrors() {
+        return flatErrorView;
     }
 
     @Override
@@ -149,7 +153,7 @@ public class PoolLayer implements ILayer {
     @Override
     public void backpropagate(float learningRate) {
         // no weights to adapt
-        fmatrix.rowVectorToMatrix(errors, deltas);
+        fmatrix.copyIntoSlice(errors, deltas);
     }
 
     @Override
@@ -164,8 +168,8 @@ public class PoolLayer implements ILayer {
      * @param errors
      */
     @Override
-    public void calculateErrors(fmatrix errors) {
-        fmatrix.batchBackpropMaxPool(deltas, this.maskLayer, errors);
+    public void calculateErrors(imatrix errors) {
+        fmatrix.batchBackpropMaxPool(deltas, this.maskLayer, scaleX, scaleY, errors);
     }
 
     @Override
@@ -184,20 +188,29 @@ public class PoolLayer implements ILayer {
     }
 
     @Override
-    public void writeOutputImage(String file) {
-        float max = this.outputs.max().value;
-        float min = this.outputs.min().value;
+    public void writeOutputImage(String file){
+        writeOutputImage(outputs,file);
+    }
+    
+    
+    public void writeOutputImage(imatrix m, String file) {
+        m.sync();
+        float max = m.max().value;
+        float min = m.min().value;
 
         float factor = 255f / (max - min);
         System.out.println("factor: " + factor);
 
-        BufferedImage bi = new BufferedImage(outputs.getNrOfColumns(), (outputs.getNrOfRows() + 5) * outputs.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
-        for (int slice = 0; slice < outputs.getNrOfSlices(); ++slice) {
-            for (int r = 0; r < outputs.getNrOfRows(); ++r) {
-                for (int c = 0; c < outputs.getNrOfColumns(); ++c) {
-                    float p = outputs.get(r, c, slice);
-                    int pi = (int) Math.round((p - min) * factor);
-                    bi.setRGB(c, r + slice * (outputs.getNrOfRows() + 5), (pi << 16) + (pi << 8) + pi);
+        int padding =0;
+        BufferedImage bi = new BufferedImage((m.getNrOfColumns() + padding) * m.getNrOfHyperSlices(), (m.getNrOfRows() + padding) * m.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
+        for (int h = 0; h < m.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
+                for (int r = 0; r < m.getNrOfRows(); ++r) {
+                    for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                        float p = m.get(r, c, slice, h);
+                        int pi = (int) Math.round((p - min) * factor);
+                        bi.setRGB(c + h * (m.getNrOfColumns() + padding), r + slice * (m.getNrOfRows() + padding), (pi << 16) + (pi << 8) + pi);
+                    }
                 }
             }
         }
@@ -216,7 +229,7 @@ public class PoolLayer implements ILayer {
     public void analyzeWeights() {
         System.out.println("No weights to analyze " + this.getName());
     }
-    
+
     /**
      * Syncs the matrices with the matrices on the gpu.
      */

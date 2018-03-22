@@ -7,37 +7,85 @@ package dae.matrix;
 import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.neuralnet.activation.Function;
 import java.nio.FloatBuffer;
-import org.jocl.cl_mem;
 
 /**
- * A zero padding wrapper around another matrix. This is a utility class that
- * makes it easier to do a full convolution without copying a regular matrix
- * into a zero padded matrix.
+ * Provides a different view on the same underlying matrix in terms of rows,
+ * columns and slices. The number of hyper slices is not changed.
+ *
+ * The matrix view must have the same hyperslice size of the underlying matrix,
+ * otherwise the operation will fail.
  *
  * @author Koen Samyn <samyn.koen@gmail.com>
  */
-public class zpmatrix implements imatrix {
+public class fmatrixview implements imatrix {
 
     private final imatrix source;
-    private final int zeroPadding;
 
-    private final int[] padding = new int[2];
+    private final int rows;
+    private final int columns;
+    private final int slices;
 
-    public zpmatrix(imatrix source, int zp) {
+    private final int sliceSize;
+    private final int hyperSliceSize;
+
+    public fmatrixview(int rows, int columns, int slices, imatrix source) {
+        this.rows = rows;
+        this.columns = columns;
+        this.slices = slices;
+
+        this.sliceSize = rows * columns;
+        this.hyperSliceSize = sliceSize * slices;
+
+        if (hyperSliceSize != source.getHyperSliceSize()) {
+            throw new IllegalArgumentException("Hyperslice sizes do not correspond, " + hyperSliceSize + " != " + source.getHyperSliceSize());
+        }
         this.source = source;
-        this.zeroPadding = zp;
-        padding[0] = 2 * zeroPadding + 32 - ((source.getNrOfColumns() + 2 * zeroPadding) % 32);
-        padding[1] = 2 * zeroPadding + 32 - ((source.getNrOfRows() + 2 * zeroPadding) % 32);
+    }
+    
+    public imatrix getSource(){
+        return source;
     }
 
     /**
-     * Returns a name for the matrix object.
+     * Converts a row and column coordinate to a 1D coordinate. The slice number
+     * and hyperslice number is assumed to be zero.
      *
-     * @return the name of the matrix object.
+     * @param r the row of the cell.
+     * @param c the column of the cell.
+     * @return the index of the cell in the 1D float backing array.
      */
+    private int rcToIndex(int r, int c) {
+        return c * rows + r;
+    }
+
+    /**
+     * Converts a row, column and slice coordinate to a 1D coordinate.
+     *
+     * @param r the row of the cell.
+     * @param c the column of the cell.
+     * @param s the slice number of the cell.
+     * @return the index of the cell in the 1D float backing array.
+     */
+    private int rcsToIndex(int r, int c, int s) {
+        return rcToIndex(r, c) + s * sliceSize;
+    }
+
+    /**
+     * Converts a row, column, slice and hyperslice coordinate to a 1D
+     * coordinate.
+     *
+     * @param r the row of the cell.
+     * @param c the column of the cell.
+     * @param s the slice number of the cell.
+     * @return the index of the cell in the 1D float backing array.
+     */
+    private int rcshToIndex(int r, int c, int s, int h) {
+        return rcsToIndex(r, c, s) + h * hyperSliceSize;
+    }
+
     @Override
     public String getName() {
-        return "zp_" + source.getName();
+        return source.getName() + "_view";
     }
 
     @Override
@@ -45,13 +93,6 @@ public class zpmatrix implements imatrix {
         return source.isRowVector();
     }
 
-    /**
-     * Checks if this matrix is a batch matrix, in other words it is a multiple
-     * of a row vector.
-     *
-     * @return true if this matrix is a row vector with a number of hyperslices
-     * that is bigger than 1.
-     */
     @Override
     public boolean isBatchMatrix() {
         return source.isBatchMatrix();
@@ -59,27 +100,23 @@ public class zpmatrix implements imatrix {
 
     @Override
     public void set(int row, int column, float value) {
-        source.set(row, column, value);
+
     }
 
     @Override
     public void set(int row, int column, int slice, float value) {
-        source.set(row, column, slice, value);
+
     }
 
     @Override
     public void set(int row, int column, int slice, int hyperslice, float value) {
-        source.set(row, column, slice, hyperslice, value);
+
     }
 
     @Override
     public void setRow(int row, float[] values) {
-        source.setRow(row, values);
     }
 
-    /**
-     * Resets all the values in the matrix to zero.
-     */
     @Override
     public void reset() {
         source.reset();
@@ -87,57 +124,57 @@ public class zpmatrix implements imatrix {
 
     @Override
     public void getRow(int row, imatrix rowStorage) {
-        source.getRow(row, rowStorage);
+
     }
 
     @Override
     public void getRow(int row, int targetRow, imatrix rowStorage) {
-        source.getRow(row, targetRow, rowStorage);
+
     }
 
     @Override
     public void setColumn(int column, float... values) {
-        source.setColumn(column, values);
+
     }
 
     @Override
     public void getColumn(int column, imatrix columnStorage) {
-        source.getColumn(column, columnStorage);
+
     }
 
     @Override
     public void getColumn(int column, int targetColumn, imatrix columnStorage) {
-        source.getColumn(column, targetColumn, columnStorage);
+
     }
 
     @Override
     public float get(int row, int column) {
-        return source.get(row, column);
+        return source.getHostData().get(rcToIndex(row, column));
     }
 
     @Override
     public float get(int row, int column, int slice) {
-        return source.get(row, column, slice);
+        return source.getHostData().get(rcsToIndex(row, column, slice));
     }
 
     @Override
     public float get(int row, int column, int slice, int hyperslice) {
-        return source.get(row, column, slice, hyperslice);
+        return source.getHostData().get(rcshToIndex(row, column, slice, hyperslice));
     }
 
     @Override
     public int getNrOfRows() {
-        return source.getNrOfRows();
+        return rows;
     }
 
     @Override
     public int getNrOfColumns() {
-        return source.getNrOfColumns();
+        return columns;
     }
 
     @Override
     public int getNrOfSlices() {
-        return source.getNrOfSlices();
+        return slices;
     }
 
     @Override
@@ -147,12 +184,12 @@ public class zpmatrix implements imatrix {
 
     @Override
     public int getSliceSize() {
-        return source.getSliceSize();
+        return sliceSize;
     }
 
     @Override
     public int getHyperSliceSize() {
-        return source.getHyperSliceSize();
+        return hyperSliceSize;
     }
 
     @Override
@@ -162,7 +199,7 @@ public class zpmatrix implements imatrix {
 
     @Override
     public int getZeroPadding() {
-        return this.zeroPadding;
+        return source.getZeroPadding();
     }
 
     @Override
@@ -187,12 +224,12 @@ public class zpmatrix implements imatrix {
 
     @Override
     public void multiply(float factor) {
-        source.multiply(factor);
+
     }
 
     @Override
     public String getSizeAsString() {
-        return source.getSizeAsString();
+        return "[ " + getNrOfRows() + " , " + getNrOfColumns() + " , " + getNrOfSlices() +" , " +getNrOfHyperSlices() + " ]";
     }
 
     @Override
@@ -202,7 +239,7 @@ public class zpmatrix implements imatrix {
 
     @Override
     public imatrix copy() {
-        return new zpmatrix(source, zeroPadding);
+        return null;
     }
 
     @Override
@@ -210,35 +247,23 @@ public class zpmatrix implements imatrix {
         return source.getHostData();
     }
 
-    /**
-     * Returns the DeviceBuffer object.
-     *
-     * @return the DeviceBuffer object.
-     */
-    @Override
-    public FloatDeviceBuffer getDeviceBuffer() {
-        return source.getDeviceBuffer();
-    }
-
-    /**
-     * Synchronizes the host buffer with the device buffer if necessary.
-     */
-    @Override
-    public void sync() {
-        source.sync();
-    }
-
-    /**
-     * Make the cpu buffer the most current.
-     */
-    @Override
-    public void makeMaster() {
-        source.makeMaster();
-    }
-
     @Override
     public boolean isTransposed() {
         return source.isTransposed();
     }
 
+    @Override
+    public FloatDeviceBuffer getDeviceBuffer() {
+        return source.getDeviceBuffer();
+    }
+
+    @Override
+    public void sync() {
+        source.sync();
+    }
+
+    @Override
+    public void makeMaster() {
+        source.makeMaster();
+    }
 }

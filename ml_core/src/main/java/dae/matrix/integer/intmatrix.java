@@ -57,6 +57,19 @@ public class intmatrix {
     }
 
     /**
+     * Creates a new intmatrix object with the given rows, columns, slices and
+     * hyperslices but without zero padding.
+     *
+     * @param rows the number of rows in the matrix.
+     * @param columns the number of columns in the matrix.
+     * @param slices the number of slices in the matrix.
+     * @param hyperslices the number of hyperslices in the matrix.
+     */
+    public intmatrix(int rows, int columns, int slices, int hyperslices) {
+        this(rows, columns, slices, hyperslices, 0);
+    }
+
+    /**
      * Creates a new intmatrix object with the given rows and columns.
      *
      * The zero padding adds a virtual number of rows and columns around the
@@ -99,8 +112,7 @@ public class intmatrix {
             this.data.put(toCopy.data.get());
         }
     }
-    
-    
+
     public void applyFunction(IntFunction f) {
         for (int i = 0; i < data.limit(); ++i) {
             int v = data.get(i);
@@ -108,17 +120,18 @@ public class intmatrix {
             data.put(i, vf);
         }
     }
-    
-     public void randomize(int min, int max) {
+
+    public void randomize(int min, int max) {
         Random r = new Random(System.currentTimeMillis());
         this.applyFunction(x -> r.nextInt(max - min) + min);
     }
-    
+
     /**
      * Returns the name of this int matrix.
+     *
      * @return the name.
      */
-    public String getName(){
+    public String getName() {
         return name;
     }
 
@@ -351,8 +364,8 @@ public class intmatrix {
     public IntDeviceBuffer getDeviceBuffer() {
         return deviceBuffer;
     }
-    
-    public void sync(){
+
+    public void sync() {
         deviceBuffer.syncHost();
     }
 

@@ -378,14 +378,27 @@ public class FMatrixOpTest {
 //        System.out.println(src2);
 //        System.out.println(dest3);
         assertMatrixEquals(src2, dest3);
+
+        fmatrix src3 = new fmatrix(16, 1, 1, 10);
+        src3.randomize(-5, 5);
+        // zeropad 2
+        fmatrix dest4 = new fmatrix(4, 4, 1, 10, 2);
+        fmatrix.copyIntoSlice(src3, dest4);
+        dest4.sync();
+
+        FloatBuffer src3Buffer = src3.getHostData();
+        FloatBuffer dst4Buffer = dest4.getHostData();
+
+        assertArrayEquals(src3Buffer.array(), dst4Buffer.array(), 0.0001f);
+
     }
 
     @Test
     public void testMaxPool() {
-        fmatrix input = new fmatrix(10, 10, 2);
+        fmatrix input = new fmatrix(10, 10, 2, 10);
         input.randomize(-3, 3);
-        intmatrix maskLayer1 = new intmatrix(5, 5, 2);
-        intmatrix maskLayer2 = new intmatrix(5, 5, 2);
+        intmatrix maskLayer1 = new intmatrix(5, 5, 2, 10);
+        intmatrix maskLayer2 = new intmatrix(5, 5, 2, 10);
 
         fmatrix output1 = new fmatrix(5, 5, 2);
         fmatrix output2 = new fmatrix(5, 5, 2);
@@ -398,11 +411,11 @@ public class FMatrixOpTest {
         assertMatrixEquals(output1, output2);
         assertMatrixEquals(maskLayer1, maskLayer2);
 
-        fmatrix backprop1 = new fmatrix(10, 10, 2);
-        fmatrix backprop2 = new fmatrix(10, 10, 2);
+        fmatrix backprop1 = new fmatrix(10, 10, 2, 10);
+        fmatrix backprop2 = new fmatrix(10, 10, 2, 10);
 
-        cpu.batchBackpropMaxPool(output1, maskLayer1, backprop1);
-        gpu.batchBackpropMaxPool(output1, maskLayer2, backprop2);
+        cpu.batchBackpropMaxPool(output1, maskLayer1, 2, 2, backprop1);
+        gpu.batchBackpropMaxPool(output1, maskLayer2, 2, 2, backprop2);
 
         backprop2.sync();
         assertMatrixEquals(backprop1, backprop2);

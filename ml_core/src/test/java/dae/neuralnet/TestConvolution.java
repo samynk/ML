@@ -61,13 +61,13 @@ public class TestConvolution {
         // The stride is one and the batch size is also one (only batch size of 1 is supported at the moment).
 
         //Layer full2 = new Layer(784, 1, 14*14, ActivationFunction.SIGMOID);
-        ConvolutionLayer cl1 = new ConvolutionLayer(28, 28, 32, 5, 1, ActivationFunction.RELU);
+        ConvolutionLayer cl1 = new ConvolutionLayer(28, 28, 32, 5, 1, 1, ActivationFunction.RELU);
         cl1.setName("Conv1");
-        PoolLayer pl1 = new PoolLayer(28, 28, 32, 2, 2);
+        PoolLayer pl1 = new PoolLayer(28, 28, 32, 2, 2, 1);
         pl1.setName("Pool1");
-        ConvolutionLayer cl2 = new ConvolutionLayer(14, 14, 32, 64, 5, 1, ActivationFunction.LEAKYRELU);
+        ConvolutionLayer cl2 = new ConvolutionLayer(14, 14, 32, 64, 5, 1, 1, ActivationFunction.LEAKYRELU);
         cl2.setName("Conv2");
-        PoolLayer pl2 = new PoolLayer(14, 14, 64, 2, 2);
+        PoolLayer pl2 = new PoolLayer(14, 14, 64, 2, 2, 1);
         pl2.setName("Pool2");
         Layer full = new Layer(pl2.getNrOfOutputs(), 1, 10, ActivationFunction.CESIGMOID);
         full.setName("full");
@@ -119,19 +119,18 @@ public class TestConvolution {
         testDigitRecognition(dl, 1, r);
     }
 
-    
     public void testConvolution2() {
         // creates a convolution layer with 5 filters with a filter size of 5x5.
         // The input will be interpreted as a 28x28 image.
         // The stride is one and the batch size is also one (only batch size of 1 is supported at the moment).
 
         //Layer full2 = new Layer(784, 1, 14*14, ActivationFunction.SIGMOID);
-        ConvolutionLayer cl1 = new ConvolutionLayer(28, 28, 32, 5, 1, ActivationFunction.LEAKYRELU);
+        ConvolutionLayer cl1 = new ConvolutionLayer(28, 28, 32, 5, 1, 1,ActivationFunction.LEAKYRELU);
         cl1.setName("Conv1");
-        PoolLayer pl1 = new PoolLayer(28, 28, 32, 2, 2);
+        PoolLayer pl1 = new PoolLayer(28, 28, 32, 2, 2,1);
         pl1.setName("Pool1");
 
-        FuzzyficationLayer fl = new FuzzyficationLayer(pl1.getNrOfOutputs(), 10);
+        FuzzyficationLayer fl = new FuzzyficationLayer(pl1.getNrOfOutputs(), 10, 1);
 
         Layer full = new Layer(fl.getNrOfOutputs(), 0, 10, ActivationFunction.CESIGMOID);
         full.setName("full");
@@ -240,7 +239,7 @@ public class TestConvolution {
         DeepLayerReader dr = new DeepLayerReader();
         DeepLayer dl = dr.readDeepLayer(importPath);
         dl.analyzeWeights();
-        
+
         testDigitRecognition(dl);
 
     }
@@ -273,7 +272,7 @@ public class TestConvolution {
 //            if (i == 0) {
 //                dl.writeOutputImages();
 //            }
-            if ((i+1) % BATCH_SIZE == 0) {
+            if ((i + 1) % BATCH_SIZE == 0) {
                 dl.adaptWeights(i, BATCH_SIZE);
             }
 

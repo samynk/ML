@@ -50,9 +50,12 @@ public class DeepLayer {
             ILayer current = layers[i];
             ILayer next = layers[i + 1];
             if (current.getNrOfOutputs() != next.getNrOfInputs()) {
+                int outputs = current.getNrOfOutputs();
+                int inputs = current.getNrOfInputs();
                 validNetwork = false;
                 throw new IllegalArgumentException("Error while constructing a DeepLayer object.\n"
-                        + "Outputs of layer " + i + " do not match inputs of the next layer.");
+                        + "Outputs of layer " + i + " do not match inputs of the next layer.\n" +
+                        "number of inputs :" + inputs +", outputs: " + outputs+ "\n" );
             }
         }
     }

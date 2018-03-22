@@ -43,6 +43,7 @@ public class DeepLayerBinaryID {
     public static final int LAYERFILTERSIZEX = 412;
     public static final int LAYERFILTERSIZEY = 413;
     public static final int LAYERFUZZYCLASSES = 414;
+    public static final int LAYERBATCHSIZE = 415;
 
     public static final int ACTIVATIONFUNCTION = 500;
     public static final int ACTIVATIONFUNCTIONTANH = 501;

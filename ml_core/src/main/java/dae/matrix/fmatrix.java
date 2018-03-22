@@ -180,6 +180,7 @@ public class fmatrix implements imatrix {
     /**
      * Sets all the elements in this matrix to zero.
      */
+    @Override
     public void reset() {
         matrixOp.reset(this);
     }
@@ -701,6 +702,15 @@ public class fmatrix implements imatrix {
     }
 
     /**
+     * Returns the size of a hyper slice.
+     *
+     * @return the size of the hyper slice.
+     */
+    public int getHyperSliceSize() {
+        return this.hyperSliceSize;
+    }
+
+    /**
      * Returns the size of the matrix.
      *
      * @return the size of the matrix.
@@ -1082,13 +1092,14 @@ public class fmatrix implements imatrix {
      * Calculates a fuzzification layer.
      *
      * @param input the inputs to fuzzify.
+     * @param classes the number of classes.
      * @param a the weights that determine the slopes of the transition.
      * @param b the weights that determine the crossing point between two
      * classes.
      * @param output the fuzzified input.
      */
-    public static void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix output) {
-        matrixOp.fuzzyFunction(input, a, b, output);
+    public static void fuzzyFunction(imatrix input, int classes, imatrix a, imatrix b, imatrix output) {
+        matrixOp.fuzzyFunction(input, classes, a, b, output);
     }
 
     /**
@@ -1103,32 +1114,37 @@ public class fmatrix implements imatrix {
      * size(outputs) = classes * (size(inputs)/(classes-1))
      *
      * @param input the input matrix which is a row vector.
+     * @param classes the number of classes in the fuzzy layer.
      * @param output the output matrix which is also a row vector.
      */
-    public static void fuzzyShiftMinus(imatrix input, imatrix output) {
-        int nrOfVariables = input.getNrOfRows();
-        int lc = output.getNrOfColumns() - 1;
-        for (int rv = 0; rv < nrOfVariables; ++rv) {
-
-            float previous = 1;
-            for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
-                float iv = input.get(rv, ic);
-                output.set(rv, ic, previous - iv);
-                previous = iv;
-            }
-            output.set(rv, lc, previous);
-        }
+    public static void fuzzyShiftMinus(imatrix input, int classes, imatrix output) {
+        matrixOp.fuzzyShiftMinus(input, classes, output);
     }
 
-    public static void fuzzyShiftDeltas(imatrix deltas, imatrix output) {
-        int nrOfVariables = deltas.getNrOfRows();
-        for (int v = 0; v < nrOfVariables; ++v) {
-            for (int c = 0; c < output.getNrOfColumns(); ++c) {
-                float dn = deltas.get(v, c);
-                float dnp1 = deltas.get(v, c + 1);
-                output.set(v, c, dnp1 - dn);
-            }
-        }
+    /**
+     *
+     * @param input
+     * @param classes
+     * @param output
+     */
+    public static void fuzzyShiftDeltas(imatrix input, int classes, imatrix output) {
+        matrixOp.fuzzyShiftDeltas(input, classes, output);
+    }
+
+    /**
+     * Performs a back propagation into the deltas of the previous layer.
+     *
+     * @param input the deltas of the fuzzification layer, in batch.
+     * @param weights normally, the a-weights of the fuzzification layer.
+     * @param classes the number of classes in the fuzzification layer.
+     * @param output the output, in batch.
+     */
+    public static void fuzzyBackProp(imatrix input, imatrix weights, int classes, imatrix output) {
+        matrixOp.fuzzyBackProp(input, weights, classes, output);
+    }
+
+    public static void fuzzyInputAdd(fmatrix inputs, imatrix weights, int classes, imatrix deltas) {
+        matrixOp.fuzzyInputAdd(inputs, weights, classes, deltas);
     }
 
     /**
@@ -1158,11 +1174,13 @@ public class fmatrix implements imatrix {
      * @param maskLayer a matrix with the same dimension as the input layer
      * which can be used to determine which input pixels contributed to the
      * output.
+     * @param scaleX the x-scale of the pool layer.
+     * @param scaleY the y-scale of the pool layer.
      * @param output the output matrix.
      *
      */
-    public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
-        matrixOp.batchBackpropMaxPool(input, maskLayer, output);
+    public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
+        matrixOp.batchBackpropMaxPool(input, maskLayer, scaleX, scaleY, output);
     }
 
     /**
@@ -1378,20 +1396,15 @@ public class fmatrix implements imatrix {
     }
 
     public static void sumPerRow(fmatrix source, fmatrix sums) {
-//        if (source.getNrOfRows() != sums.getNrOfRows()) {
-//            System.out.println("SumPerColumn Error: number of columns is not the same: " + source.getNrOfColumns() + "!=" + sums.getNrOfColumns());
-//        }
-        for (int r = 0; r < source.getNrOfRows(); ++r) {
-            float sum = 0;
-            for (int c = 0; c < source.getNrOfColumns(); ++c) {
-                sum += source.get(r, c);
-            }
-            sums.set(0, r, sum);
-        }
+        matrixOp.sumPerRow(source, sums);
     }
 
     public static void copyInto(imatrix toCopy, imatrix dest) {
         matrixOp.copyInto(toCopy, dest);
+    }
+
+    public static void copyIntoSlice(imatrix toCopy, imatrix dest) {
+        matrixOp.copyIntoSlice(toCopy, dest);
     }
 
     /**
@@ -1545,17 +1558,21 @@ public class fmatrix implements imatrix {
     }
 
     public static void writeAs2DImage(imatrix m, Path location) {
+        writeAs2DImage(m, m.getNrOfRows(), m.getNrOfColumns(), location);
+    }
+
+    public static void writeAs2DImage(imatrix m, int rows, int cols, Path location) {
         float max = m.max().value;
         float min = m.min().value;
 
         float factor = 255f / (max - min);
-        System.out.println("factor: " + factor);
 
-        BufferedImage bi = new BufferedImage(m.getNrOfColumns(), m.getNrOfRows(), BufferedImage.TYPE_BYTE_GRAY);
-
-        for (int r = 0; r < m.getNrOfRows(); ++r) {
-            for (int c = 0; c < m.getNrOfColumns(); ++c) {
-                float p = (m.get(r, c) - min) * factor;
+        BufferedImage bi = new BufferedImage(cols, rows, BufferedImage.TYPE_BYTE_GRAY);
+        FloatBuffer fb = m.getHostData();
+        fb.rewind();
+        for (int r = 0; r < rows; ++r) {
+            for (int c = 0; c < cols; ++c) {
+                float p = (fb.get() - min) * factor;
                 int pi = (int) Math.round(p);
                 bi.setRGB(c, r, (pi << 16) + (pi << 8) + pi);
             }
@@ -1586,6 +1603,46 @@ public class fmatrix implements imatrix {
                 (m.getNrOfColumns() + 5) * nrOfSlicesCols,
                 (m.getNrOfRows() + 5) * slicesPerRow,
                 BufferedImage.TYPE_BYTE_GRAY);
+
+        for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
+            int imageRowB = (slice % slicesPerRow) * (m.getNrOfRows() + padding);
+            int imageColB = (slice / slicesPerRow) * (m.getNrOfColumns() + padding);
+
+            for (int r = 0; r < m.getNrOfRows(); ++r) {
+                for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                    float p = (m.get(r, c, slice) - min) * factor;
+                    int pi = (int) Math.round(p);
+                    bi.setRGB(imageColB + c, imageRowB + r, (pi << 16) + (pi << 8) + pi);
+                }
+            }
+        }
+
+        String homeDir = System.getProperty("user.home");
+        Path exportPath = Paths.get(homeDir, ".nn", location + ".png");
+        try {
+            Files.createDirectories(exportPath);
+            ImageIO.write(bi, "png", exportPath.toFile());
+
+        } catch (IOException ex) {
+            Logger.getLogger(Layer.class
+                    .getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public static void writeAs4DImage(imatrix m, int slicesPerRow, int padding, Path location) {
+        float max = m.max().value;
+        float min = m.min().value;
+
+        float factor = 255f / (max - min);
+        // (x-min)*factor
+
+        int nrOfSlicesCols = (m.getNrOfSlices() / slicesPerRow) + 1;
+
+        BufferedImage bi = new BufferedImage(
+                (m.getNrOfColumns() + 5) * nrOfSlicesCols,
+                (m.getNrOfRows() + 5) * slicesPerRow,
+                BufferedImage.TYPE_BYTE_GRAY);
+
         for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
             int imageRowB = (slice % slicesPerRow) * (m.getNrOfRows() + padding);
             int imageColB = (slice / slicesPerRow) * (m.getNrOfColumns() + padding);
@@ -1619,7 +1676,9 @@ public class fmatrix implements imatrix {
         this.deviceBuffer.syncHost();
     }
 
+    @Override
     public void makeMaster() {
         deviceBuffer.markCpuMatrixAsMatrix();
     }
+
 }

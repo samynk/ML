@@ -23,6 +23,7 @@ public class MatrixOpKernel extends OpenCLKernel {
 
     cl_kernel dotadd;
     cl_kernel dotaddlc;
+    cl_kernel sumPerRow;
     cl_kernel dotsubtract;
     cl_kernel dotmultiply;
     cl_kernel dotmultiplyfactor;
@@ -48,6 +49,7 @@ public class MatrixOpKernel extends OpenCLKernel {
         super.init(context, commandQueue);
         dotadd = this.createKernel("dotadd");
         dotaddlc = this.createKernel("dotaddlc");
+        sumPerRow = this.createKernel("sumPerRow");
         dotsubtract = this.createKernel("dotsubtract");
         dotmultiply = this.createKernel("dotmultiply");
         dotmultiplyfactor = this.createKernel("dotmultiplyfactor");
@@ -114,6 +116,31 @@ public class MatrixOpKernel extends OpenCLKernel {
         return O;
     }
 
+    public void sumPerRow(imatrix input, imatrix output) {
+        FloatDeviceBuffer oDB = output.getDeviceBuffer();
+        FloatDeviceBuffer iDB = input.getDeviceBuffer();
+        int[] h = new int[]{input.getNrOfHyperSlices(), input.getHyperSliceSize()};
+        cl_mem memOutput = oDB.getRWMem();
+        GPU.zeroFillRW(output);
+        cl_mem mem_op1 = input.getDeviceBuffer().uploadRMatrix();
+
+        clSetKernelArg(sumPerRow, 0, Sizeof.cl_int2, Pointer.to(h));
+        clSetKernelArg(sumPerRow, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
+        clSetKernelArg(sumPerRow, 2, Sizeof.cl_mem, Pointer.to(memOutput));
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                sumPerRow,
+                1,
+                null,
+                oDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        oDB.markRWMatrixAsMaster();
+    }
+
     public imatrix adamVelocity(imatrix O, float beta2, imatrix previousVelocity, imatrix currentGradient) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
         float[] factors = new float[]{beta2};
@@ -141,15 +168,14 @@ public class MatrixOpKernel extends OpenCLKernel {
         oDB.markRWMatrixAsMaster();
         return O;
     }
-    
+
     public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
         FloatDeviceBuffer oDB = weights.getDeviceBuffer();
-        float[] factors = new float[]{eta, 1f/(1-beta1), 1f/(1-beta2), epsilon};
+        float[] factors = new float[]{eta, 1f / (1 - beta1), 1f / (1 - beta2), epsilon};
         cl_mem memOutput = oDB.uploadRWMatrix();
 
         cl_mem mem_op1 = moment.getDeviceBuffer().uploadRMatrix();
         cl_mem mem_op2 = velocity.getDeviceBuffer().uploadRMatrix();
-        
 
         clSetKernelArg(adamAdaptWeights, 0, Sizeof.cl_float4, Pointer.to(factors));
         clSetKernelArg(adamAdaptWeights, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
@@ -259,7 +285,7 @@ public class MatrixOpKernel extends OpenCLKernel {
 
     private intmatrix seedMatrix;
 
-    void randomize(imatrix m, float min, float max) {
+    public void randomize(imatrix m, float min, float max) {
         if (m.getSize() > seedMatrix.getSize()) {
             seedMatrix = new intmatrix(m.getSize(), 1);
             applyKernel(init_random, seedMatrix);

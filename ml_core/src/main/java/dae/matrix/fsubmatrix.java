@@ -222,7 +222,17 @@ public class fsubmatrix implements imatrix {
      */
     @Override
     public int getSize() {
-        return rows * columns;
+        return getHyperSliceSize() * this.hyperslices;
+    }
+
+    /**
+     * Returns the size of a hyper slice.
+     *
+     * @return the size of the hyper slice.
+     */
+    @Override
+    public int getHyperSliceSize() {
+        return rows * columns * slices;
     }
 
     /**
@@ -232,7 +242,7 @@ public class fsubmatrix implements imatrix {
      */
     @Override
     public int getSliceSize() {
-        return rows * columns * slices;
+        return rows * columns;
     }
 
     @Override

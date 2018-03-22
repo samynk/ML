@@ -94,21 +94,72 @@ public interface FMatrixOp {
      * @param maskLayer a matrix with the same dimension as the input layer
      * which can be used to determine which input pixels contributed to the
      * output.
+     * @param scaleX the x-scale of the pool layer.
+     * @param scaleY the y-scale of the pool layer.
      * @param output the output matrix.
      *
      */
-    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output);
+    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output);
 
     /**
      * Calculates a fuzzification layer.
      *
      * @param input the inputs to fuzzify.
+     * @param classes then number of classes.
      * @param a the weights that determine the slopes of the transition.
      * @param b the weights that determine the crossing point between two
      * classes.
      * @param output the fuzzified input.
      */
-    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix output);
+    public void fuzzyFunction(imatrix input, int classes, imatrix a, imatrix b, imatrix output);
+
+    /**
+     * Expands the elements of the input into the output with the following
+     * algorithm:
+     *
+     * o1 = 1-i1 o2 = i1-i2 o3 = i3-i2 ... on = i(n-1)
+     *
+     * This also means that for every classes-1 input elements an extra output
+     * element will be created.
+     *
+     * size(outputs) = classes * (size(inputs)/(classes-1))
+     *
+     * @param input the input matrix which is a row vector.
+     * @param classes the number of fuzzy classes.
+     * @param output the output matrix which is also a row vector.
+     */
+    public void fuzzyShiftMinus(imatrix input, int classes, imatrix output);
+
+    /**
+     * Converts a one D vector into a 2D matrix with the following formula:
+     *
+     * nrOfVariables : input.rows / classes.
+     *
+     * The output is the a 2d matrix with dimensions : [nrOfVariables,classes-1]
+     *
+     * Per row of the output matrix the follow formula will be applied:
+     * output[currentRow] = [input1 - input0, input2 - input1, ...,
+     * input_classes-1 - input_classes_2]
+     *
+     * resulting in a row with (classes-1) elements.
+     *
+     * @param input the input matrix.
+     * @param classes the number of classes.
+     * @param output the 2D output matrix.
+     */
+    public void fuzzyShiftDeltas(imatrix input, int classes, imatrix output);
+
+    /**
+     * Performs a back propagation into the deltas of the previous layer.
+     *
+     * @param input the deltas of the fuzzification layer, in batch.
+     * @param weights normally, the a-weights of the fuzzification layer.
+     * @param classes the number of classes in the fuzzification layer.
+     * @param output the output, in batch.
+     */
+    public void fuzzyBackProp(imatrix input, imatrix weights, int classes, imatrix output);
+
+    public void fuzzyInputAdd(imatrix inputs, imatrix weights, int classes, imatrix deltas);
 
     /**
      * Calculates the gradients for the a
@@ -153,6 +204,15 @@ public interface FMatrixOp {
     public imatrix dotadd(imatrix result, float factor1, imatrix op1, float factor2, imatrix op2);
 
     /**
+     * Calculates the sum per row and per hyperslice and stores the sum into the
+     * corresponding row of the output matrix.
+     *
+     * @param input the input matrix.
+     * @param output the output matrix.
+     */
+    public void sumPerRow(imatrix input, imatrix output);
+
+    /**
      * Calculates the element by element subtraction of op1 and op2.
      *
      * @param result the matrix to store the result.
@@ -171,7 +231,7 @@ public interface FMatrixOp {
      * @return the result matrix
      */
     public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2);
-    
+
     /**
      * Multiplies every element of the op1 matrix with the given factor.
      *
@@ -181,10 +241,10 @@ public interface FMatrixOp {
      * @return the result matrix
      */
     public imatrix dotmultiply(imatrix result, imatrix op1, float factor);
-    
+
     /**
      * Squares the matrix.
-     * 
+     *
      * @param op1 the matrix to square.
      * @return the squared matrix.
      */
@@ -199,40 +259,60 @@ public interface FMatrixOp {
      * @param dest the destination matrix.
      */
     public void copyInto(imatrix toCopy, imatrix dest);
-    
+
+    /**
+     * Copies a matrix into another matrix. The slice sizes are compared and if
+     * the slice size is the same, the slices will be copied regardless of the
+     * rows and columns of the two matrices.
+     *
+     * This function can be used to copy a column vector into a 2D matrix for
+     * example.
+     *
+     * @param toCopy the matrix to copy.
+     * @param dest the destination matrix.
+     */
+    public void copyIntoSlice(imatrix toCopy, imatrix dest);
+
     /**
      * Applies the activation function on the given matrix.
-     * @param function the function that defines the derived activation function.
+     *
+     * @param function the function that defines the derived activation
+     * function.
      * @param m the matrix to apply the activation function to.
      */
-    public void applyActivation(ActivationFunction function, fmatrix m) ;
-    
+    public void applyActivation(ActivationFunction function, fmatrix m);
+
     /**
      * Applies the derived activation function on the give matrix.
-     * @param function the function that defines the derived activation function.
+     *
+     * @param function the function that defines the derived activation
+     * function.
      * @param m the matrix to apply the activation function to.
      */
-    public void applyDerivedActivation(ActivationFunction function, fmatrix m) ;
+    public void applyDerivedActivation(ActivationFunction function, fmatrix m);
 
     /**
      * Resets a matrix to zero.
+     *
      * @param m the matrix to reset.
      */
     public void reset(fmatrix m);
-    
+
     /**
      * Randomizes a matrix between the given bound.
+     *
      * @param m the matrix to randomize.
      * @param min the minimum for the random float.
      * @param max the maximum for the random float.
      */
     public void randomize(imatrix m, float min, float max);
-    
+
     /**
-     * Calculates the new velocity in the adam algorithm by
-     * applying the following formula to every cell in the matrix:
-     * 
+     * Calculates the new velocity in the adam algorithm by applying the
+     * following formula to every cell in the matrix:
+     *
      * newVelocity = beta2*previousVelocity + (1-beta2) * gradient^2
+     *
      * @param result the imatrix to store the result in.
      * @param beta2 the beta2 factor of the algorithm.
      * @param previousVelocity the previous velocity matrix.
@@ -240,11 +320,11 @@ public interface FMatrixOp {
      * @return the resulting updated matrix.
      */
     public imatrix adamVelocity(imatrix result, float beta2, imatrix previousVelocity, imatrix gradient);
-    
+
     /**
-     * Adapts the weights according to the adam gradient descent algorithm. The bias correction
-     * will be applied in place.
-     * 
+     * Adapts the weights according to the adam gradient descent algorithm. The
+     * bias correction will be applied in place.
+     *
      * @param weights the current weights.
      * @param eta the learning rate.
      * @param beta1 the beta1 value.
@@ -252,7 +332,8 @@ public interface FMatrixOp {
      * @param epsilon the epsilon value.
      * @param moment the current moment.
      * @param velocity the current velocity.
-     * @return 
+     * @return
      */
-    public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) ;
+    public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity);
+
 }

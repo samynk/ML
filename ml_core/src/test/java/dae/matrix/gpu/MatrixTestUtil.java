@@ -21,7 +21,7 @@ public class MatrixTestUtil {
                     for (int c = 0; c < output1.getNrOfColumns(); ++c) {
                         float v1 = output1.get(r, c, s, h);
                         float v2 = output2.get(r, c, s, h);
-                        assertEquals("error on :<" + r + "," + c + "," + s + "," + h + ">", v1, v2, 0.01f);
+                        assertEquals("error on : [" + r + "," + c + "," + s + "," + h + "] ", v1, v2, 0.01f);
                     }
                 }
             }

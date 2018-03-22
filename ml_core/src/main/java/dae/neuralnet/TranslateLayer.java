@@ -1,6 +1,7 @@
 package dae.neuralnet;
 
 import dae.matrix.fmatrix;
+import dae.matrix.imatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.analysis.WeightAnalysis;
 import dae.neuralnet.analysis.WeightAnalyzer;
@@ -62,7 +63,7 @@ public class TranslateLayer extends AbstractLayer {
     }
 
     @Override
-    public void calculateErrors(fmatrix errors) {
+    public void calculateErrors(imatrix errors) {
         fmatrix.copyInto(this.deltas, errors);
     }
 

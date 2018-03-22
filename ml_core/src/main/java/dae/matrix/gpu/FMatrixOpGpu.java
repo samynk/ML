@@ -21,9 +21,11 @@ import org.jocl.cl_mem;
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public class FMatrixOpGpu implements FMatrixOp {
+
     private final mdim2D aDim = new mdim2D();
     private final mdim2D bDim = new mdim2D();
     private final mdim2D cDim = new mdim2D();
+
     /**
      * Calculates the following product : alpha A * B + beta * C, where A*B is a
      * matrix multiplication. The result is stored in C.
@@ -37,10 +39,10 @@ public class FMatrixOpGpu implements FMatrixOp {
     @Override
     public void sgemm(float alpha, imatrix A, imatrix B, float beta, imatrix C) {
         // Create the device input buffers
-        determineLayout(A,aDim);
-        determineLayout(B,bDim);
-        determineLayout(C,cDim);
-        
+        determineLayout(A, aDim);
+        determineLayout(B, bDim);
+        determineLayout(C, cDim);
+
         int M = cDim.rows;
         int K = bDim.rows;
         int N = cDim.columns;
@@ -65,29 +67,28 @@ public class FMatrixOpGpu implements FMatrixOp {
                 memC, 0, cDim.ld,
                 GPU.CL_COMMAND_QUEUE, event);
 
-        
         CDB.markRWMatrixAsMaster();
     }
-    
-    private void determineLayout(imatrix m, mdim2D dim){
-        if(m.isBatchMatrix()){
+
+    private void determineLayout(imatrix m, mdim2D dim) {
+        if (m.isBatchMatrix()) {
             dim.transposed = m.isTransposed();
-            if(m.isTransposed()){
+            if (m.isTransposed()) {
                 dim.rows = m.getNrOfHyperSlices();
                 dim.columns = m.getNrOfColumns();
                 dim.ld = dim.columns;
-            }else{
+            } else {
                 dim.rows = m.getNrOfRows();
                 dim.columns = m.getNrOfHyperSlices();
                 dim.ld = dim.rows;
             }
-        }else{
+        } else {
             dim.rows = m.getNrOfRows();
             dim.columns = m.getNrOfColumns();
             dim.transposed = m.isTransposed();
-            if (m.isTransposed()){
+            if (m.isTransposed()) {
                 dim.ld = dim.columns;
-            }else{
+            } else {
                 dim.ld = dim.rows;
             }
         }
@@ -267,27 +268,79 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @param maskLayer a matrix with the same dimension as the input layer
      * which can be used to determine which input pixels contributed to the
      * output.
+     * @param scaleX the x-scale of the pool layer.
+     * @param scaleY the y-scale of the pool layer.
      * @param output the output matrix.
      *
      */
     @Override
-    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, imatrix output) {
-        GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, output);
+    public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
+        GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, scaleX, scaleY, output);
     }
 
     @Override
-    public void fuzzyFunction(imatrix input, imatrix a, imatrix b, imatrix functions) {
+    public void fuzzyFunction(imatrix input, int classes, imatrix a, imatrix b, imatrix output) {
+        GPU.KERNEL_FUZZY.fuzzyFunction(input, classes, a, b, output);
+    }
 
-        for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
-            float iv = input.get(0, ic);
-            for (int oc = 0; oc < a.getNrOfColumns(); ++oc) {
-                float av = a.get(ic, oc);
-                float bv = b.get(ic, oc);
+    /**
+     * Performs a back propagation into the deltas of the previous layer.
+     *
+     * @param input the deltas of the fuzzification layer, in batch.
+     * @param weights normally, the a-weights of the fuzzification layer.
+     * @param classes the number of classes in the fuzzification layer.
+     * @param output the output, in batch.
+     */
+    @Override
+    public void fuzzyBackProp(imatrix input, imatrix weights, int classes, imatrix output) {
+        GPU.KERNEL_FUZZY.fuzzyBackProp(input, weights, classes, output);
+    }
 
-                float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
-                functions.set(ic, oc, v);
-            }
-        }
+    /**
+     * Expands the elements of the input into the output with the following
+     * algorithm:
+     *
+     * o1 = 1-i1 o2 = i1-i2 o3 = i3-i2 ... on = i(n-1)
+     *
+     * This also means that for every classes-1 input elements an extra output
+     * element will be created.
+     *
+     * size(outputs) = classes * (size(inputs)/(classes-1))
+     *
+     * @param input the input matrix which is a row vector.
+     * @param output the output matrix which is also a row vector.
+     */
+    @Override
+    public void fuzzyShiftMinus(imatrix input, int classes, imatrix output) {
+        GPU.KERNEL_FUZZY.fuzzyShiftMinus(input, classes, output);
+    }
+
+    @Override
+    public void fuzzyInputAdd(imatrix inputs, imatrix weights, int classes, imatrix deltas) {
+        GPU.KERNEL_FUZZY.fuzzyInputAdd(inputs, weights, classes, deltas);
+    }
+
+    /**
+     * Converts a one D vector into a 2D matrix with the following formula:
+     *
+     * nrOfVariables : input.rows / classes.
+     *
+     * The output is the a one D matrix with dimensions :
+     * [nrOfVariables*(classes-1)]
+     *
+     * Per row of the output matrix the follow formula will be applied:
+     * output[0] = input1 - input0 output[1] = input2 - input1, ..., ...
+     * output[input_classes-1 - input_classes_2]
+     *
+     * resulting in a row with (classes-1) elements.
+     *
+     * @param input the input matrix.
+     * @param classes the number of classes.
+     * @param output the 2D output matrix.
+     */
+    @Override
+    public void fuzzyShiftDeltas(imatrix input, int classes, imatrix output) {
+        GPU.KERNEL_FUZZY.fuzzyShiftDeltas(input, classes, output);
     }
 
     /**
@@ -320,6 +373,18 @@ public class FMatrixOpGpu implements FMatrixOp {
     }
 
     /**
+     * Calculates the sum per row and per hyperslice and stores the sum into the
+     * corresponding row of the output matrix.
+     *
+     * @param input the input matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void sumPerRow(imatrix input, imatrix output) {
+        GPU.KERNEL_MATRIX_OP.sumPerRow(input, output);
+    }
+
+    /**
      * Calculates the element by element subtraction of op1 and op2.
      *
      * @param result the matrix to store the result.
@@ -344,7 +409,7 @@ public class FMatrixOpGpu implements FMatrixOp {
     public imatrix dotmultiply(imatrix result, imatrix op1, imatrix op2) {
         return GPU.KERNEL_MATRIX_OP.dotmultiply(result, op1, op2);
     }
-    
+
     /**
      * Multiplies every element of the op1 matrix with the given factor.
      *
@@ -354,40 +419,41 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @return the result matrix
      */
     @Override
-    public imatrix dotmultiply(imatrix result, imatrix op1, float factor){
+    public imatrix dotmultiply(imatrix result, imatrix op1, float factor) {
         return GPU.KERNEL_MATRIX_OP.dotmultiply(result, op1, factor);
     }
-    
+
     /**
      * Squares the matrix.
-     * 
+     *
      * @param op1 the matrix to square.
      * @return the squared matrix.
      */
     @Override
-    public imatrix square(imatrix op1){
+    public imatrix square(imatrix op1) {
         return GPU.KERNEL_MATRIX_OP.square(op1);
     }
-    
+
     /**
-     * Calculates the new velocity in the adam algorithm by
-     * applying the following formula to every cell in the matrix:
-     * 
+     * Calculates the new velocity in the adam algorithm by applying the
+     * following formula to every cell in the matrix:
+     *
      * newVelocity = beta2*previousVelocity + (1-beta2) * gradient^2
+     *
      * @param result the imatrix to store the result in.
      * @param beta2 the beta2 factor of the algorithm.
      * @param previousVelocity the previous velocity matrix.
      * @param gradient the current gradient.
      */
     @Override
-    public imatrix adamVelocity(imatrix result, float beta2, imatrix previousVelocity, imatrix gradient){
+    public imatrix adamVelocity(imatrix result, float beta2, imatrix previousVelocity, imatrix gradient) {
         return GPU.KERNEL_MATRIX_OP.adamVelocity(result, beta2, previousVelocity, gradient);
     }
-    
+
     /**
-     * Adapts the weights according to the adam gradient descent algorithm. The bias correction
-     * will be applied in place.
-     * 
+     * Adapts the weights according to the adam gradient descent algorithm. The
+     * bias correction will be applied in place.
+     *
      * @param weights the current weights.
      * @param eta the learning rate.
      * @param beta1 the beta1 value.
@@ -395,7 +461,7 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @param epsilon the epsilon value.
      * @param moment the current moment.
      * @param velocity the current velocity.
-     * @return 
+     * @return
      */
     @Override
     public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
@@ -413,6 +479,22 @@ public class FMatrixOpGpu implements FMatrixOp {
     @Override
     public void copyInto(imatrix toCopy, imatrix dest) {
         GPU.enqueueCopyMatrix(toCopy, dest);
+    }
+
+    /**
+     * Copies a matrix into another matrix. The slice sizes are compared and if
+     * the slice size is the same, the slices will be copied regardless of the
+     * rows and columns of the two matrices.
+     *
+     * This function can be used to copy a column vector into a 2D matrix for
+     * example.
+     *
+     * @param toCopy the matrix to copy.
+     * @param dest the destination matrix.
+     */
+    @Override
+    public void copyIntoSlice(imatrix toCopy, imatrix dest) {
+        GPU.enqueueCopySliceMatrix(toCopy, dest);
     }
 
     /**
@@ -476,16 +558,17 @@ public class FMatrixOpGpu implements FMatrixOp {
         GPU.zeroFillR(m);
         m.getDeviceBuffer().markRMatrixAsMaster();
     }
-    
+
     /**
      * Randomizes a matrix between the given bound.
+     *
      * @param m the matrix to randomize.
      * @param min the minimum for the random float.
      * @param max the maximum for the random float.
      */
     @Override
-    public void randomize(imatrix m, float min, float max){
-        GPU.KERNEL_MATRIX_OP.randomize(m,min,max);
+    public void randomize(imatrix m, float min, float max) {
+        GPU.KERNEL_MATRIX_OP.randomize(m, min, max);
     }
 
     public static void cleanup() {
