@@ -395,13 +395,13 @@ public class FMatrixOpTest {
 
     @Test
     public void testMaxPool() {
-        fmatrix input = new fmatrix(10, 10, 2, 10);
+        fmatrix input = new fmatrix(6, 6, 2, 10);
         input.randomize(-3, 3);
-        intmatrix maskLayer1 = new intmatrix(5, 5, 2, 10);
-        intmatrix maskLayer2 = new intmatrix(5, 5, 2, 10);
+        intmatrix maskLayer1 = new intmatrix(3, 3, 2, 10);
+        intmatrix maskLayer2 = new intmatrix(3, 3, 2, 10);
 
-        fmatrix output1 = new fmatrix(5, 5, 2);
-        fmatrix output2 = new fmatrix(5, 5, 2);
+        fmatrix output1 = new fmatrix(3, 3, 2, 10);
+        fmatrix output2 = new fmatrix(3, 3, 2, 10);
 
         cpu.batchMaxPool(input, output1, maskLayer1);
         gpu.batchMaxPool(input, output2, maskLayer2);
@@ -411,8 +411,8 @@ public class FMatrixOpTest {
         assertMatrixEquals(output1, output2);
         assertMatrixEquals(maskLayer1, maskLayer2);
 
-        fmatrix backprop1 = new fmatrix(10, 10, 2, 10);
-        fmatrix backprop2 = new fmatrix(10, 10, 2, 10);
+        fmatrix backprop1 = new fmatrix(6, 6, 2, 10);
+        fmatrix backprop2 = new fmatrix(6, 6, 2, 10);
 
         cpu.batchBackpropMaxPool(output1, maskLayer1, 2, 2, backprop1);
         gpu.batchBackpropMaxPool(output1, maskLayer2, 2, 2, backprop2);

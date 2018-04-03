@@ -225,7 +225,7 @@ public class DeepLayerWriter {
         // nrofblocks
         dos.writeInt(8);
         dos.writeInt(LAYERNAME);
-        dos.writeUTF(l.getName());
+        dos.writeUTF(l.getName()!=null?l.getName():"convolution");
         dos.writeInt(LAYERINPUTDIMENSION);
         dos.writeInt(l.getNrOfWInputs());
         dos.writeInt(l.getNrOfHInputs());

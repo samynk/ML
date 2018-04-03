@@ -67,7 +67,7 @@ public class PoolKernel extends OpenCLKernel {
                 0,
                 null,
                 null);
-
+        
         outputDB.markRWMatrixAsMaster();
         maskDB.markRWMatrixAsMaster();
     }

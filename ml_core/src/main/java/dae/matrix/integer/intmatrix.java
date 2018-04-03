@@ -231,8 +231,8 @@ public class intmatrix {
     }
 
     /**
-     * Sets a cell in this matrix to the given value. The slice number is
-     * assumed to be zero.
+     * Sets a cell in this matrix to the given value, the hyperslice
+     * value is set to zero.
      *
      * @param row the row to set.
      * @param column the column to set.
@@ -241,6 +241,19 @@ public class intmatrix {
      */
     public void set(int row, int column, int slice, int value) {
         data.put(rcsToIndex(row, column, slice), value);
+    }
+    
+     /**
+     * Sets a cell in this matrix to the given value.
+     *
+     * @param row the row to set.
+     * @param column the column to set.
+     * @param slice the slice to set.
+     * @param h the hyperslice.
+     * @param value the new value for the cell.
+     */
+    public void set(int row, int column, int slice, int h, int value) {
+         data.put(rcshToIndex(row, column, slice,h), value);
     }
 
     /**
@@ -417,4 +430,6 @@ public class intmatrix {
         }
         return result.toString();
     }
+
+    
 }

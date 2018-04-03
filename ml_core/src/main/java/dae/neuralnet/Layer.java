@@ -39,7 +39,6 @@ public class Layer extends AbstractLayer {
     private imatrix constraint;
 
     private final imatrix deltaWeights;
-    private final imatrix batchDeltaWeights;
 
     private float dropRate = 0;
     private boolean dropRateSet = false;
@@ -128,7 +127,6 @@ public class Layer extends AbstractLayer {
         this.tweights = new tmatrix(weights);
         this.tdeltas = new tmatrix(deltas);
         this.deltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
-        this.batchDeltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
     }
 
     /**
@@ -229,7 +227,6 @@ public class Layer extends AbstractLayer {
             t = dropWeightMatrix;
         }
         fmatrix.sgemm(1, t, deltas, 0, errors);
-        errors.sync();
         //fmatrix.multiply(deltas, this.deltas, this.tweights);
     }
 

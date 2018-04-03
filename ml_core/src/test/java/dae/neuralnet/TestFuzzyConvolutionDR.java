@@ -27,10 +27,10 @@ import static org.junit.Assert.*;
  */
 public class TestFuzzyConvolutionDR {
 
-    private static final int TRAIN_ITERATIONS = 3000;
-    private static final int TEST_ITERATIONS = 20;
+    private static final int TRAIN_ITERATIONS = 6000;
+    private static final int TEST_ITERATIONS = -1;
     private static final int BATCHSIZE = 100;
-    private static final float LEARNING_RATE = .1f;
+    private static final float LEARNING_RATE = .08f;
 
     private String neuralNetBase = "2018_3_22/10_29";
 
@@ -63,19 +63,32 @@ public class TestFuzzyConvolutionDR {
         fmatrix trainSetLabels = blr.getResult();
         System.out.println(trainSetLabels.getSizeAsString());
 
-        ConvolutionLayer layer1 = new ConvolutionLayer(28, 28, 16, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
-        layer1.setName("convolution_layer");
+        int numStartFilters = 32;
 
-       
+        ConvolutionLayer layer1 = new ConvolutionLayer(28, 28, numStartFilters, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer1.setName("convolution_layer 1");
 
-        AbstractLayer layer3 = new Layer(layer1.getNrOfOutputs(), 1, 500, BATCHSIZE, ActivationFunction.TANH);
-        layer1.setName("third_layer");
+        PoolLayer pl = new PoolLayer(28, 28, numStartFilters, 2, 2, BATCHSIZE);
+        pl.setName("pool layer 1");
 
-        AbstractLayer layer4 = new Layer(layer3.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
-        layer1.setName("third_layer");
+        ConvolutionLayer convLayer2 = new ConvolutionLayer(14, 14, numStartFilters, 4, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer1.setName("convolution_layer 2");
+
+        PoolLayer pl2 = new PoolLayer(14, 14, numStartFilters * 4, 2, 2, BATCHSIZE);
+        pl2.setName("pool layer 2");
+
+        FuzzyficationLayer fl = new FuzzyficationLayer(pl2.getNrOfOutputs(), 3, BATCHSIZE, ActivationFunction.TANH);
+        fl.setName("fuzzy layer 1");
+
+        AbstractLayer layer6 = new Layer(fl.getNrOfOutputs(), 1, 600, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer1.setName("final_layer");
+
+        AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
+        layer1.setName("final_layer");
 
         LearningRate lrd = new LearningRateConst(LEARNING_RATE / BATCHSIZE);
-        DeepLayer dl = new DeepLayer(lrd, layer1,  layer3, layer4);
+        DeepLayer dl = new DeepLayer(lrd, layer1, pl, convLayer2, pl2, fl, layer6, layer7);
+
         dl.setCostFunction(new CrossEntropyCostFunction());
         Random r = new Random(System.currentTimeMillis());
         dl.randomizeWeights(r, -5f, 5f);

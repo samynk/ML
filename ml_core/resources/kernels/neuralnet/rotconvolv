@@ -1,0 +1,15 @@
+__kernel void dotadd(
+    const __global float* kernel,
+    const int2 kernelSize,
+    const int numKernels,
+    const float angleStep,
+    const __global float* rKernels,
+    __global float* result
+)
+{
+    int xyIndex = get_global_id(0);
+    int sliceIndex = get_global_id(1);
+
+
+    result[index] = op1[index] + op2[index];
+}

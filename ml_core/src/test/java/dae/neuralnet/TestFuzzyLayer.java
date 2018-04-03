@@ -129,17 +129,16 @@ public class TestFuzzyLayer {
 
     @Test
     public void testSumPerRow() {
-        fmatrix inputGPU = new fmatrix(11, 1, 1, 30);
+        fmatrix inputGPU = new fmatrix(1000, 1, 1, 30);
         inputGPU.randomize(-4f, 4f);
-        fmatrix outputGPU = new fmatrix(11, 1, 1, 1);
-        fmatrix outputCPU = new fmatrix(11, 1, 1, 1);
+        fmatrix outputGPU = new fmatrix(1000, 1, 1, 1);
+        fmatrix outputCPU = new fmatrix(1000, 1, 1, 1);
 
         gpu.sumPerRow(inputGPU, outputGPU);
         cpu.sumPerRow(inputGPU, outputCPU);
-        inputGPU.sync();
         outputGPU.sync();
         System.out.println(inputGPU);
-        assertMatrixEquals(outputCPU, outputCPU);
+        assertMatrixEquals(outputCPU, outputGPU);
     }
 
     @Test

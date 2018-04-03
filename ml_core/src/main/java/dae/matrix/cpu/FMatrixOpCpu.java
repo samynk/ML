@@ -120,17 +120,19 @@ public class FMatrixOpCpu implements FMatrixOp {
 
         int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
 
-        for (int slice = 0; slice < slices; ++slice) {
-            for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
-                for (int or = 0; or < output.getNrOfRows(); ++or) {
-                    float m = max(slice, or, oc, scaleX, scaleY, input, maskLayer);
-                    output.set(or, oc, slice, m);
+        for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < slices; ++slice) {
+                for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
+                    for (int or = 0; or < output.getNrOfRows(); ++or) {
+                        float m = max(or, oc, slice, h, scaleX, scaleY, input, maskLayer);
+                        output.set(or, oc, slice, h, m);
+                    }
                 }
             }
         }
     }
 
-    private float max(int slice, int or, int oc, int filterCols, int filterRows, imatrix input, intmatrix maskLayer) {
+    private float max(int or, int oc, int slice, int h, int filterCols, int filterRows, imatrix input, intmatrix maskLayer) {
         float m = -Float.MAX_VALUE;
         int imx = 0;
         int imy = 0;
@@ -139,7 +141,7 @@ public class FMatrixOpCpu implements FMatrixOp {
             for (int r = 0; r < filterRows; ++r) {
                 int ix = or * filterRows + r;
                 int iy = oc * filterRows + c;
-                float value = input.get(ix, iy, slice);
+                float value = input.get(ix, iy, slice, h);
                 if (value > m) {
                     m = value;
                     cell = r + c * filterRows;
@@ -147,7 +149,7 @@ public class FMatrixOpCpu implements FMatrixOp {
 
             }
         }
-        maskLayer.set(or, oc, slice, cell);
+        maskLayer.set(or, oc, slice, h, cell);
         return m;
     }
 
@@ -218,17 +220,20 @@ public class FMatrixOpCpu implements FMatrixOp {
     @Override
     public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
+        int hyperSlices = Math.min(input.getNrOfHyperSlices(), output.getNrOfHyperSlices());
 
-        for (int slice = 0; slice < slices; ++slice) {
-            for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
-                for (int ir = 0; ir < input.getNrOfRows(); ++ir) {
-                    int oc = ic * scaleX;
-                    int or = ir * scaleY;
-                    int cell = maskLayer.get(ir, ic, slice);
-                    int x = cell / scaleY;
-                    int y = cell % scaleY;
-                    float v = input.get(ir, ic, slice);
-                    output.set(or + y, oc + x, slice, v);
+        for (int h = 0; h < hyperSlices; ++h) {
+            for (int slice = 0; slice < slices; ++slice) {
+                for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
+                    for (int ir = 0; ir < input.getNrOfRows(); ++ir) {
+                        int oc = ic * scaleX;
+                        int or = ir * scaleY;
+                        int cell = maskLayer.get(ir, ic, slice, h);
+                        int x = cell / scaleY;
+                        int y = cell % scaleY;
+                        float v = input.get(ir, ic, slice, h);
+                        output.set(or + y, oc + x, slice, h, v);
+                    }
                 }
             }
         }
@@ -313,7 +318,7 @@ public class FMatrixOpCpu implements FMatrixOp {
                     float av = a.get(index, 0);
                     float bv = b.get(index, 0);
 
-                    float v = 1 / (1 + (float) Math.exp(-av * (iv + bv)));
+                    float v = av * (iv + bv);
                     functions.set(index, 0, 0, h, v);
                 }
             }
@@ -759,8 +764,8 @@ public class FMatrixOpCpu implements FMatrixOp {
             float[] arrSrc = src.getHostData().array();
             float[] arrDst = dst.getHostData().array();
             System.arraycopy(arrSrc, 0, arrDst, 0, floatsToCopy);
-        }else{
-            copyInto(src,dst);
+        } else {
+            copyInto(src, dst);
         }
     }
 

@@ -7,6 +7,8 @@ import dae.matrix.zpmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.analysis.WeightAnalysis;
 import dae.neuralnet.analysis.WeightAnalyzer;
+import dae.neuralnet.gradient.AdamGradientAlgorithm;
+import dae.neuralnet.gradient.GradientAlgorithm;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -50,10 +52,6 @@ public class ConvolutionLayer implements ILayer {
      */
     private final fmatrix newWeights;
     /**
-     * The batch collection of weights
-     */
-    private final fmatrix batchWeights;
-    /**
      * The inputs for this layer.
      */
     private final imatrix inputs;
@@ -89,6 +87,11 @@ public class ConvolutionLayer implements ILayer {
     private final ActivationFunction function;
 
     /**
+     * The gradient algorithm.
+     */
+    private GradientAlgorithm gradientAlgorithm;
+
+    /**
      * Creates a new convolution layer. The inputs of the convolutional layer
      * are interpreted as a 2D array of inputs.
      *
@@ -121,7 +124,7 @@ public class ConvolutionLayer implements ILayer {
      */
     public ConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int filter, int stride, int batchSize, ActivationFunction af) {
         // filter weights are shared.
-        this(wInputs, hInputs, sInputs, features, filter, stride, batchSize, af, new fmatrix(filter, filter, features));
+        this(wInputs, hInputs, sInputs, features, filter, stride, batchSize, af, new fmatrix(filter, filter, sInputs * features));
     }
 
     /**
@@ -143,8 +146,8 @@ public class ConvolutionLayer implements ILayer {
         // filter weights are shared.
 
         this.weights = weights;
-        newWeights = new fmatrix(filter, filter, features);
-        batchWeights = new fmatrix(filter, filter, features);
+        this.gradientAlgorithm = new AdamGradientAlgorithm(weights);
+        newWeights = new fmatrix(filter, filter, sInputs * features);
 
         int padding = (filter - 1) / 2;
         this.filterSize = filter;
@@ -154,18 +157,18 @@ public class ConvolutionLayer implements ILayer {
         inputs = new fmatrix(wInputs, hInputs, sInputs, batchSize, padding);
         backpropErrors = new fmatrix(wInputs, hInputs, sInputs, batchSize);
 
-        errors = new fmatrix(wInputs, hInputs, features, batchSize);
+        errors = new fmatrix(wInputs, hInputs, sInputs * features, batchSize);
         flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
 
         int oR = 1 + (wInputs - filter + padding * 2) / stride;
         int oC = 1 + (hInputs - filter + padding * 2) / stride;
 
-        outputs = new fmatrix(oR, oC, features, batchSize);
+        outputs = new fmatrix(oR, oC, sInputs * features, batchSize);
         outputVector = new fmatrix(outputs.getHyperSliceSize(), 1, 1, batchSize);
-        deltas = new fmatrix(oR, oC, features, batchSize);
+        deltas = new fmatrix(oR, oC, sInputs * features, batchSize);
         zpDeltas = new zpmatrix(deltas, padding);
 
-        derivatives = new fmatrix(oR, oC, features, batchSize);
+        derivatives = new fmatrix(oR, oC, sInputs * features, batchSize);
         function = af;
 
         this.batchSize = batchSize;
@@ -198,12 +201,12 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public int getNrOfInputs() {
-        return inputs.getSliceSize();
+        return inputs.getHyperSliceSize();
     }
 
     @Override
     public int getNrOfOutputs() {
-        return outputVector.getSliceSize();
+        return outputVector.getHyperSliceSize();
     }
 
     public int getNrOfFeatures() {
@@ -241,7 +244,7 @@ public class ConvolutionLayer implements ILayer {
     @Override
     public void forward() {
         fmatrix.batchConvolve(inputs, this.weights, stride, this.outputs);
-        
+
         switch (function) {
             case SOFTMAX:
                 fmatrix.softMaxPerRow(outputs);
@@ -273,7 +276,7 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public void adaptWeights(float factor) {
-        fmatrix.dotadd(weights, 1, weights, -factor, newWeights);
+        gradientAlgorithm.adaptWeights(newWeights, factor);
     }
 
     @Override
@@ -318,7 +321,7 @@ public class ConvolutionLayer implements ILayer {
         // in terms of the output of the activation function.
         // 2.a copy the outputs into the derivatives matrix.
         fmatrix.copyInto(this.outputs, this.derivatives);
-        
+
         // 2.b apply the derivative of the activation function to the output.
         fmatrix.applyDerivedActivation(function, derivatives);
 

@@ -86,7 +86,7 @@ public class FuzzyficationLayer implements ILayer {
 
         this.sublayerOutputs = new fmatrix(nrOfInputs * (classes - 1), 1, 1, batchSize);
         this.deltas = new fmatrix(nrOfInputs * (classes - 1), 1, 1, batchSize);
-        this.summedDeltas = new fmatrix(nrOfInputs * (classes - 1), 1, 1, batchSize, 1);
+        this.summedDeltas = new fmatrix(nrOfInputs * (classes - 1), 1);
 
         this.outputs = new fmatrix(nrOfOutputs, 1, 1, batchSize);
         this.errors = new fmatrix(nrOfOutputs, 1, 1, batchSize);
@@ -150,7 +150,7 @@ public class FuzzyficationLayer implements ILayer {
 
     @Override
     public void setInputs(imatrix input) {
-        fmatrix.copyInto(input, this.inputs);
+        fmatrix.copyIntoSlice(input, this.inputs);
     }
 
     @Override
@@ -183,7 +183,7 @@ public class FuzzyficationLayer implements ILayer {
         fmatrix.sumPerRow(deltas, summedDeltas);
         fmatrix.dotmultiply(bWeightDeltas, summedDeltas, aWeights);
 
-        fmatrix.fuzzyInputAdd(this.inputs, bWeights, this.nrOfClasses, aWeightDeltas);
+        fmatrix.fuzzyInputAdd(this.inputs, bWeights, this.nrOfClasses, aWeightDeltasBatch);
 
         fmatrix.dotmultiply(aWeightDeltasBatch, deltas, aWeightDeltasBatch);
         fmatrix.sumPerRow(aWeightDeltasBatch, aWeightDeltas);
@@ -192,7 +192,6 @@ public class FuzzyficationLayer implements ILayer {
     @Override
     public void calculateErrors(imatrix errors) {
         fmatrix.fuzzyBackProp(deltas, aWeights, nrOfClasses, errors);
-        errors.sync();
     }
 
     @Override

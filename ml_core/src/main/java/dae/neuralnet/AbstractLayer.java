@@ -193,7 +193,7 @@ public abstract class AbstractLayer implements ILayer {
      */
     @Override
     public void setInputs(imatrix inputs) {
-        fmatrix.copyInto(inputs, this.inputs);
+        fmatrix.copyIntoSlice(inputs, this.inputs);
     }
 
     /**

@@ -462,38 +462,53 @@ public class GPU {
     }
 
     public static void enqueueCopySliceMatrix(imatrix src, imatrix dst) {
-        if (src.getHyperSliceSize() == dst.getHyperSliceSize()) {
-            FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
-            dbSrc.uploadRMatrix();
-            FloatDeviceBuffer dbDst = dst.getDeviceBuffer();
+        FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
+        FloatDeviceBuffer dbDst = dst.getDeviceBuffer();
 
+        if (src.getHyperSliceSize() == dst.getHyperSliceSize()) {
+            dbSrc.uploadRMatrix();
             int deviceSize = Math.min(dbSrc.getDeviceSize(), dbDst.getDeviceSize());
 
-            if (dst.getZeroPadding() == 0)
-            {
-            clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
-                    dbSrc.getRMem(),
-                    dbDst.getRMem(),
-                    0, 0,
-                    deviceSize, 0, null, null
-            );
-            }else{
+            if (dst.getZeroPadding() == 0) {
+                clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
+                        dbSrc.getRMem(),
+                        dbDst.getRMem(),
+                        0, 0,
+                        deviceSize, 0, null, null
+                );
+            } else {
                 int numRows = dst.getNrOfRows();
                 int numCols = dst.getNrOfColumns();
                 int numSlices = dst.getNrOfSlices() * dst.getNrOfHyperSlices();
-                long region[] = new long[]{numRows * Float.BYTES, numCols, numSlices};
-                
+                long region[] = new long[]{numRows * Sizeof.cl_float, numCols, numSlices};
+
                 clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                        dbSrc.getRMem(),
+                        dbDst.getRMem(),
+                        dbSrc.getDeviceOffset(),
+                        dbDst.getDeviceOffset(),
+                        region,
+                        numRows * Sizeof.cl_float, numRows * numCols * Sizeof.cl_float,
+                        dbDst.getDeviceRowPitch(), dbDst.getDeviceSlicePitch(),
+                        0, null, null);
+            }
+            dbDst.markRMatrixAsMaster();
+        } else if (src.getHyperSliceSize() < dst.getHyperSliceSize()) {
+            dbSrc.uploadRMatrix();
+            int numSlicesDst = dst.getNrOfHyperSlices();
+            int numSlicesSrc = src.getNrOfHyperSlices();
+            int numSlices = Math.min(numSlicesDst, numSlicesSrc);
+            int hSlicePitch = src.getHyperSliceSize() * Sizeof.cl_float;
+            long region[] = new long[]{hSlicePitch, numSlices, 1};
+            clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
                     dbSrc.getRMem(),
                     dbDst.getRMem(),
                     dbSrc.getDeviceOffset(),
                     dbDst.getDeviceOffset(),
                     region,
-                    numRows * Sizeof.cl_float, numRows* numCols*Sizeof.cl_float,
-                    dbDst.getDeviceRowPitch(), dbDst.getDeviceSlicePitch(),
+                    hSlicePitch, 0,
+                    dbDst.getDeviceSlicePitch() * dst.getNrOfSlices(), 0,
                     0, null, null);
-            }
-            dbDst.markRMatrixAsMaster();
         } else {
             enqueueCopyMatrix(src, dst);
         }

@@ -266,4 +266,9 @@ public class fmatrixview implements imatrix {
     public void makeMaster() {
         source.makeMaster();
     }
+    
+    @Override
+    public String toString(){
+        return source.toString();
+    }
 }
