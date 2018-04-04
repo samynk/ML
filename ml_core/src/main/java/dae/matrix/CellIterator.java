@@ -13,5 +13,5 @@ public interface CellIterator {
      * @param slice the slice of the current cell.
      * @param currentValue the current value of the cell.
      */
-    public void cell(fmatrix source, int row, int column, int slice, float currentValue);
+    public void cell(imatrix source, int row, int column, int slice, float currentValue);
 }

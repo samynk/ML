@@ -4,6 +4,7 @@
  */
 package dae.matrix.cpu;
 
+import dae.matrix.float2;
 import dae.matrix.fmatrix;
 import static dae.matrix.fmatrix.equalDimension;
 import dae.matrix.gpu.GPU;
@@ -693,6 +694,178 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     /**
+     * Rotates a kernel. The first slice will be preserved and rotated copies
+     * will be generated in the subsequent slices. The start angle indicates the
+     * angle of the first slice.
+     *
+     * @param filter the kernel to rotate.
+     * @param nrOfFeatures the number of features in the kernel.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     */
+    @Override
+    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
+        int slices = filter.getNrOfSlices();
+        fmatrix sincos = new fmatrix(2, slices);
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
+        float angle = minAngle;
+        for (int i = 0; i < slices; ++i) {
+            float s = (float) Math.sin(angle);
+            float c = (float) Math.cos(angle);
+            sincos.set(0, i, s);
+            sincos.set(1, i, c);
+            angle += angleStep;
+        }
+
+        // slices per feature
+        int sPRF = filter.getNrOfSlices() / nrOfFeatures;
+        // slices per rotation.
+        int sPRR = sPRF / nrOfRotations;
+
+        float2 mask = new float2();
+
+        for (int f = 0; f < nrOfFeatures; ++f) {
+            for (int rot = 1; rot < nrOfRotations; ++rot) {
+                for (int s = 0; s < sPRR; ++s) {
+                    int baseSlice = f * sPRF + s;
+                    int currentSlice = f * sPRF + sPRR * rot + s;
+
+                    float sa = (float) sincos.get(0, rot);
+                    float ca = (float) sincos.get(1, rot);
+                    float rcx = filter.getNrOfColumns() / 2.0f;
+                    float rcy = filter.getNrOfRows() / 2.0f;
+
+                    for (int x = 0; x < filter.getNrOfColumns(); ++x) {
+                        for (int y = 0; y < filter.getNrOfRows(); ++y) {
+                            float rx = x - rcx;
+                            float ry = y - rcy;
+
+                            float ox = rcx + rx * ca - ry * sa;
+                            float oy = rcy + rx * sa + ry * ca;
+
+                            float xPerc = Math.abs(ox % 1);
+                            float yPerc = Math.abs(oy % 1);
+                            int startx = (int) ox;
+                            int starty = (int) oy;
+
+                            getKernelValue(filter, startx, starty, baseSlice, mask);
+                            float i1 = mask.x;
+                            float m1 = mask.y;
+                            getKernelValue(filter, startx, starty + 1, baseSlice, mask);
+                            float i2 = mask.x;
+                            float m2 = mask.y;
+                            getKernelValue(filter, startx + 1, starty, baseSlice, mask);
+                            float i3 = mask.x;
+                            float m3 = mask.y;
+                            getKernelValue(filter, startx + 1, starty + 1, baseSlice, mask);
+                            float i4 = mask.x;
+                            float m4 = mask.y;
+
+                            float a1 = (1 - xPerc) * (1 - yPerc);
+                            float a2 = (1 - xPerc) * (yPerc);
+                            float a3 = xPerc * (1 - yPerc);
+                            float a4 = xPerc * yPerc;
+
+                            float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
+                            float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
+                            filter.set(y, x, currentSlice, value / norm);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Condenses the input to detect the max activation rotation. The maximum
+     * rotation and activation value is then stored into the output matrix.
+     *
+     * @param input the input matrix.
+     * @param nrOfFeatures number of features in the convolution.
+     * @param nrOfRotations number of rotations per feature.
+     * @param minAngle the minimum angle of the rotation.
+     * @param maxAngle the maximum angle of the rotation.
+     * @param output the output of this function.
+     */
+    @Override
+    public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output, imatrix rotOutput) {
+        int spf = output.getNrOfSlices() / nrOfFeatures;
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
+        for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < output.getNrOfSlices(); s += 1) {
+
+                int subSlice = s % spf;
+                int feature = s / spf;
+
+                int inputSliceBase = feature * spf * nrOfRotations;
+                for (int x = 0; x < output.getNrOfColumns(); ++x) {
+                    for (int y = 0; y < output.getNrOfRows(); ++y) {
+                        float max = -Float.MAX_VALUE;
+                        float rot = 0;
+                        for (int r = 0; r < nrOfRotations; ++r) {
+                            float value = input.get(y, x, inputSliceBase + r * spf + subSlice, h);
+                            if (value > max) {
+                                max = value;
+                                rot = r * angleStep;
+                            }
+                        }
+                        rotOutput.set(y, x, s, h, rot);
+                        output.set(y, x, s, h, max);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Performs the inverse operation of the maxRotation and stores the given
+     * value according the the rotation stored in rotInput
+     *
+     * @param valInput the activation values.
+     * @param rotInput the rotation values.
+     * @param nrOfFeatures the number of features in the convolution layer.
+     * @param nrOfRotations the number of rotations per features.
+     * @param minAngle the minAngle of the rotations.
+     * @param maxAngle the maxAngle of the rotations.
+     * @param output the result of the inverse operation.
+     */
+    @Override
+    public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+        int spf = valInput.getNrOfSlices() / nrOfFeatures;
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
+        for (int h = 0; h < valInput.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < valInput.getNrOfSlices(); s += 1) {
+                int subSlice = s % spf;
+                int feature = s / spf;
+
+                int inputSliceBase = feature * spf * nrOfRotations;
+                for (int x = 0; x < valInput.getNrOfColumns(); ++x) {
+                    for (int y = 0; y < valInput.getNrOfRows(); ++y) {
+
+                        float rotValue = rotInput.get(y, x, s, h);
+                        float value = valInput.get(y, x, s, h);
+
+                        int rotIndex = Math.round(rotValue / angleStep);
+                        int slice = inputSliceBase + rotIndex * spf + subSlice;
+                        output.set(y, x, slice, h, value);
+                    }
+                }
+            }
+        }
+    }
+
+    private void getKernelValue(imatrix filter, int x, int y, int slice, float2 result) {
+        if (x >= 0 && y >= 0 && x < filter.getNrOfColumns() && y < filter.getNrOfRows()) {
+            result.x = filter.get(y, x, slice);
+            result.y = 1;
+        } else {
+            result.x = 0;
+            result.y = 0;
+        }
+    }
+
+    /**
      * Randomizes a matrix between the given bound.
      *
      * @param m the matrix to randomize.
@@ -773,5 +946,4 @@ public class FMatrixOpCpu implements FMatrixOp {
     public void reset(fmatrix m) {
         m.applyFunction(x -> 0);
     }
-
 }

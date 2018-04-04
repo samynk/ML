@@ -17,6 +17,7 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 import static dae.matrix.gpu.MatrixTestUtil.*;
 import dae.neuralnet.activation.ActivationFunction;
+import java.nio.file.Paths;
 
 /**
  *
@@ -115,12 +116,12 @@ public class FMatrixOpTest {
         fmatrix output2 = new fmatrix(input.getNrOfRows() - filter.getNrOfRows() + 1, input.getNrOfColumns() - filter.getNrOfColumns() + 1, nrOfFilters * input.getNrOfSlices());
 
         long start1 = System.currentTimeMillis();
-        new FMatrixOpGpu().batchConvolve(input, filter, 1, output1);
+        gpu.batchConvolve(input, filter, 1, output1);
         long end1 = System.currentTimeMillis();
         System.out.println("Batch convolve - GPU time : " + (end1 - start1));
 
         long start2 = System.currentTimeMillis();
-        new FMatrixOpCpu().batchConvolve(input, filter, 1, output2);
+        cpu.batchConvolve(input, filter, 1, output2);
         long end2 = System.currentTimeMillis();
         System.out.println("Batch convolve - CPU time : " + (end2 - start2));
 
@@ -264,11 +265,10 @@ public class FMatrixOpTest {
         cpu.batchBackpropCorrelate(deltas, filters, 1, cpu_outputs);
         gpu_outputs.sync();
 
-        System.out.println("GPU output");
-        System.out.println(gpu_outputs);
-        System.out.println("CPU output");
-        System.out.println(cpu_outputs);
-
+//        System.out.println("GPU output");
+//        System.out.println(gpu_outputs);
+//        System.out.println("CPU output");
+//        System.out.println(cpu_outputs);
         assertMatrixEquals(cpu_outputs, gpu_outputs);
     }
 
@@ -428,22 +428,20 @@ public class FMatrixOpTest {
         fmatrix op2 = new fmatrix(5, 7, 3);
         op2.randomize(-5, 5);
 
-        System.out.println("op1");
-        System.out.println(op1);
-        System.out.println("op2");
-        System.out.println(op2);
-
+//        System.out.println("op1");
+//        System.out.println(op1);
+//        System.out.println("op2");
+//        System.out.println(op2);
         fmatrix resultCpu = new fmatrix(5, 7, 3);
         fmatrix resultGpu = new fmatrix(5, 7, 3);
 
         cpu.dotsubtract(resultCpu, op1, op2);
         gpu.dotsubtract(resultGpu, op1, op2);
 
-        System.out.println("CPU");
-        System.out.println(resultCpu);
-        System.out.println("GPU");
-        System.out.println(resultGpu);
-
+//        System.out.println("CPU");
+//        System.out.println(resultCpu);
+//        System.out.println("GPU");
+//        System.out.println(resultGpu);
         resultGpu.sync();
         assertMatrixEquals(resultCpu, resultGpu);
     }
@@ -455,21 +453,20 @@ public class FMatrixOpTest {
         fmatrix op2 = new fmatrix(5, 7, 3);
         op2.randomize(-5, 5);
 
-        System.out.println("op1");
-        System.out.println(op1);
-        System.out.println("op2");
-        System.out.println(op2);
-
+//        System.out.println("op1");
+//        System.out.println(op1);
+//        System.out.println("op2");
+//        System.out.println(op2);
         fmatrix resultCpu = new fmatrix(5, 7, 3);
         fmatrix resultGpu = new fmatrix(5, 7, 3);
 
         cpu.dotadd(resultCpu, op1, op2);
         gpu.dotadd(resultGpu, op1, op2);
 
-        System.out.println("CPU");
-        System.out.println(resultCpu);
-        System.out.println("GPU");
-        System.out.println(resultGpu);
+//        System.out.println("CPU");
+//        System.out.println(resultCpu);
+//        System.out.println("GPU");
+//        System.out.println(resultGpu);
         resultGpu.sync();
         assertMatrixEquals(resultCpu, resultGpu);
     }
@@ -481,11 +478,10 @@ public class FMatrixOpTest {
         fmatrix op2 = new fmatrix(5, 7, 3);
         op2.randomize(-5, 5);
 
-        System.out.println("op1");
-        System.out.println(op1);
-        System.out.println("op2");
-        System.out.println(op2);
-
+//        System.out.println("op1");
+//        System.out.println(op1);
+//        System.out.println("op2");
+//        System.out.println(op2);
         fmatrix resultCpu = new fmatrix(5, 7, 3);
         fmatrix resultGpu = new fmatrix(5, 7, 3);
 
@@ -507,11 +503,10 @@ public class FMatrixOpTest {
         fmatrix op2 = new fmatrix(5, 7, 3);
         op2.randomize(-5, 5);
 
-        System.out.println("op1");
-        System.out.println(op1);
-        System.out.println("op2");
-        System.out.println(op2);
-
+//        System.out.println("op1");
+//        System.out.println(op1);
+//        System.out.println("op2");
+//        System.out.println(op2);
         fmatrix resultCpu = new fmatrix(5, 7, 3);
         fmatrix resultGpu = new fmatrix(5, 7, 3);
 
@@ -519,11 +514,10 @@ public class FMatrixOpTest {
         gpu.dotmultiply(resultGpu, op1, op2);
         resultGpu.sync();
 
-        System.out.println("CPU");
-        System.out.println(resultCpu);
-        System.out.println("GPU");
-        System.out.println(resultGpu);
-
+//        System.out.println("CPU");
+//        System.out.println(resultCpu);
+//        System.out.println("GPU");
+//        System.out.println(resultGpu);
         assertMatrixEquals(resultCpu, resultGpu);
     }
 
@@ -622,5 +616,74 @@ public class FMatrixOpTest {
     public void testRandom() {
         fmatrix toRandomize = new fmatrix(10, 10);
         gpu.randomize(toRandomize, -5, 5);
+    }
+
+    @Test
+    public void testRotateKernel() {
+        fmatrix filterCpu = new fmatrix(49, 49, 28);
+        // set pattern in in first slice.
+        for (int x = 0; x < 49; ++x) {
+            for (int y = 0; y < 49; ++y) {
+                float val = (y / 7 + x / 7) % 2 == 0 ? 1 : 0;
+                for (int fs = 0; fs < 4; ++fs) {
+                    switch (fs) {
+                        case 0:
+                        case 1:
+                        case 2:
+                            if (val > 0.01f) {
+                                val = val - fs * 0.05f;
+                            }
+                            break;
+                        case 3:
+                            val = 0.5f;
+                            break;
+                    }
+
+                    filterCpu.set(y, x, fs * 7, val);
+                }
+            }
+        }
+        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("startRotation"));
+        fmatrix filterGpu = new fmatrix(filterCpu);
+
+        gpu.rotateKernels(filterGpu, 1, 7, 0, (float) Math.PI);
+        filterGpu.sync();
+        cpu.rotateKernels(filterCpu, 4, 7, 0, (float) (Math.PI - Math.PI / 8.0));
+
+        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("rotationCpu"));
+        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("rotationGpu"));
+
+    }
+
+    @Test
+    public void maxRotation() {
+        fmatrix input = new fmatrix(5, 5, 4 * 8, 2);
+        input.randomize(-1, 1);
+
+        fmatrix outputCpu = new fmatrix(5, 5, 4, 2);
+        fmatrix rotOutputCpu = new fmatrix(5, 5, 4, 2);
+        fmatrix outputGpu = new fmatrix(5, 5, 4, 2);
+        fmatrix rotOutputGpu = new fmatrix(5, 5, 4, 2);
+
+        gpu.maxRotation(input, 4, 8, 0, (float) Math.PI, outputGpu, rotOutputGpu);
+        outputGpu.sync();
+        rotOutputGpu.sync();
+        cpu.maxRotation(input, 4, 8, 0, (float) Math.PI, outputCpu, rotOutputCpu);
+
+        assertMatrixEquals(outputCpu, outputGpu);
+        assertMatrixEquals(rotOutputCpu, rotOutputGpu);
+
+        fmatrix output2Cpu = new fmatrix(5, 5, 32, 2);
+        fmatrix output2Gpu = new fmatrix(5, 5, 32, 2);
+        gpu.maxInverseRotation(outputGpu, rotOutputGpu, 4, 8, 0, (float) Math.PI, output2Gpu);
+        cpu.maxInverseRotation(outputCpu, rotOutputCpu, 4, 8, 0, (float) Math.PI, output2Cpu);
+        output2Gpu.sync();
+        
+        System.out.println("Cpu");
+        System.out.println(output2Cpu);
+        System.out.println("Gpu");
+        System.out.println(output2Gpu);
+        
+         assertMatrixEquals(output2Cpu, output2Gpu);
     }
 }

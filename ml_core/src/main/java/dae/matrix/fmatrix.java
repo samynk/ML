@@ -8,6 +8,7 @@ import dae.neuralnet.Layer;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.activation.Function;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.file.Files;
@@ -881,7 +882,7 @@ public class fmatrix implements imatrix {
      * @param f the function to apply.
      */
     public void applyCellFunction(IndexedFunction f) {
-        this.iterateCells((fmatrix source, int row, int column, int slice, float currentValue) -> {
+        this.iterateCells((imatrix source, int row, int column, int slice, float currentValue) -> {
             float vf = f.evaluate(row, column, slice, currentValue);
             set(row, column, slice, vf);
         });
@@ -971,7 +972,7 @@ public class fmatrix implements imatrix {
         final Random r = new Random(System.currentTimeMillis());
         final float diff = (maxValue - minValue);
 
-        result.iterateCells((fmatrix source, int row, int column, int slice, float currentValue) -> {
+        result.iterateCells((imatrix source, int row, int column, int slice, float currentValue) -> {
             float value = (r.nextFloat() * diff) + minValue;
             source.set(row, column, slice, value);
         });
@@ -1203,6 +1204,36 @@ public class fmatrix implements imatrix {
      */
     public static void applyDerivedActivation(ActivationFunction function, fmatrix m) {
         matrixOp.applyDerivedActivation(function, m);
+    }
+
+    /**
+     * Rotates a kernel. The first slice will be preserved and rotated copies
+     * will be generated in the subsequent slices. The start angle indicates the
+     * angle of the first slice.
+     *
+     * @param filter the kernel to rotate.
+     * @param nrOfFeatures the number of features in the kernel.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     */
+    public static void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
+        matrixOp.rotateKernels(filter, nrOfFeatures, nrOfRotations, minAngle, maxAngle);
+    }
+
+    /**
+     * Condenses the input to detect the max activation rotation. The maximum
+     * rotation and activation value is then stored into the output matrix.
+     *
+     * @param input the input matrix.
+     * @param nrOfFeatures number of features in the convolution.
+     * @param nrOfRotations number of rotations per feature.
+     * @param minAngle the minimum angle of the rotation.
+     * @param maxAngle the maximum angle of the rotation.
+     * @param output the output of this function.
+     */
+    public static void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output,imatrix rotOutput) {
+        matrixOp.maxRotation(input, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output,rotOutput);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -1600,8 +1631,8 @@ public class fmatrix implements imatrix {
         int nrOfSlicesCols = (m.getNrOfSlices() / slicesPerRow) + 1;
 
         BufferedImage bi = new BufferedImage(
-                (m.getNrOfColumns() + 5) * nrOfSlicesCols,
-                (m.getNrOfRows() + 5) * slicesPerRow,
+                (m.getNrOfColumns() + padding) * nrOfSlicesCols,
+                (m.getNrOfRows() + padding) * slicesPerRow,
                 BufferedImage.TYPE_BYTE_GRAY);
 
         for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
@@ -1620,8 +1651,12 @@ public class fmatrix implements imatrix {
         String homeDir = System.getProperty("user.home");
         Path exportPath = Paths.get(homeDir, ".nn", location + ".png");
         try {
-            Files.createDirectories(exportPath);
-            ImageIO.write(bi, "png", exportPath.toFile());
+            Files.createDirectories(exportPath.getParent());
+            File check = exportPath.toFile();
+            if (Files.exists(exportPath)) {
+                Files.delete(exportPath);
+            }
+            ImageIO.write(bi, "png", check);
 
         } catch (IOException ex) {
             Logger.getLogger(Layer.class

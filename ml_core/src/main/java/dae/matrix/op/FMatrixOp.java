@@ -336,4 +336,44 @@ public interface FMatrixOp {
      */
     public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity);
 
+    /**
+     * Rotates a kernel. The first slice will be preserved and rotated copies
+     * will be generated in the subsequent slices. The start angle indicates the
+     * angle of the first slice.
+     *
+     * @param filter the kernel to rotate.
+     * @param nrOfFeatures the number of features in the kernel.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     */
+    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle);
+
+    /**
+     * Condenses the input to detect the max activation rotation. The maximum
+     * rotation and activation value is then stored into the output matrix.
+     *
+     * @param input the input matrix.
+     * @param nrOfFeatures number of features in the convolution.
+     * @param nrOfRotations number of rotations per feature.
+     * @param minAngle the minimum angle of the rotation.
+     * @param maxAngle the maximum angle of the rotation.
+     * @param valOutput the matrix that stores the maximum activation values.
+     * @param rotOutput the matrix that stores the rotation values.
+     */
+    public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix valOutput, imatrix rotOutput);
+    
+    /**
+     * Performs the inverse operation of the maxRotation and stores the given value according the the rotation stored in rotInput
+     * 
+     * @param valInput the activation values.
+     * @param rotInput the rotation values.
+     * @param nrOfFeatures the number of features in the convolution layer.
+     * @param nrOfRotations the number of rotations per features.
+     * @param minAngle the minAngle of the rotations.
+     * @param maxAngle the maxAngle of the rotations.
+     * @param output the result of the inverse operation.
+     */
+    public void maxInverseRotation(imatrix valInput,imatrix rotInput,  int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output);
+
 }

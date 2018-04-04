@@ -553,6 +553,55 @@ public class FMatrixOpGpu implements FMatrixOp {
         }
     }
 
+    /**
+     * Rotates a kernel. The first slice will be preserved and rotated copies
+     * will be generated in the subsequent slices. The start angle indicates the
+     * angle of the first slice.
+     *
+     * @param filter the kernel to rotate.
+     * @param nrOfFeatures the number of features in the kernel.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     */
+    @Override
+    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
+        GPU.KERNEL_CONVOLV.rotateKernels(filter, nrOfFeatures, nrOfRotations, minAngle, maxAngle);
+    }
+
+    /**
+     * Condenses the input to detect the max activation rotation. The maximum
+     * rotation and activation value is then stored into the output matrix.
+     *
+     * @param input the input matrix.
+     * @param nrOfFeatures number of features in the convolution.
+     * @param nrOfRotations number of rotations per feature.
+     * @param minAngle the minimum angle of the rotation.
+     * @param maxAngle the maximum angle of the rotation.
+     * @param valOutput the output matrix of this function that contains the maximum activation values.
+     * @param rotOutput the output matrix of this function that contains the rotation values.
+     */
+    @Override
+    public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix valOutput, imatrix rotOutput) {
+        GPU.KERNEL_CONVOLV.maxRotation(input, nrOfFeatures, nrOfRotations, minAngle, maxAngle, valOutput, rotOutput);
+    }
+    
+    /**
+     * Performs the inverse operation of the maxRotation and stores the given value according the the rotation stored in rotInput
+     * 
+     * @param valInput the activation values.
+     * @param rotInput the rotation values.
+     * @param nrOfFeatures the number of features in the convolution layer.
+     * @param nrOfRotations the number of rotations per features.
+     * @param minAngle the minAngle of the rotations.
+     * @param maxAngle the maxAngle of the rotations.
+     * @param output the result of the inverse operation.
+     */
+    @Override
+    public void maxInverseRotation(imatrix valInput,imatrix rotInput,  int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output){
+        GPU.KERNEL_CONVOLV.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
+    }
+
     @Override
     public void reset(fmatrix m) {
         GPU.zeroFillR(m);

@@ -169,3 +169,149 @@ __kernel void batchBackpropCorrelate(
     }
     output[index] = sum;
 }
+
+float2 getFilterValue(__global float* filter, int x, int y,int fSlice,  int2 fDim)
+{
+    int index = rcsToIndex((int3)(x, y, fSlice), fDim);
+    return x <fDim.x && y < fDim.y / fDim.x && x >=0 && y >=0 ? (float2 )( filter[index],1 ): (float2)(0,0);
+}
+
+// fDim.x : nr of columns in the filter
+// fDim.y : nr of rows in the filter.
+// fDim.z : nr of total slices per feature
+// fDim.w : nr of slices per rotation feature
+__kernel void rotateKernels(
+    __global float* filter,
+    const int4 fDim,
+    const __constant float2* sinCos
+)
+{
+    int index = get_global_id(0);
+    int2 filterSize=(int2)(fDim.y, fDim.x*fDim.y);
+    int3 rcs = indexToRCS(index, filterSize );
+
+    // first slice is unrotated filter.
+    int slice = rcs.z;
+    int featureIndex = slice % fDim.z;
+    int fSlice = slice / fDim.z;
+    int currentRotation = featureIndex / fDim.w; 
+    int subslice = featureIndex % fDim.w;
+
+    float sa = sinCos[currentRotation].x;
+    float ca = sinCos[currentRotation].y;
+    
+    float rcx = fDim.x / 2.0f;
+    float rcy = fDim.y / 2.0f;
+
+    float x = rcs.x;
+    float y = rcs.y;
+       
+    float rx = x - rcx;
+    float ry = y - rcy;
+
+    float ox = rcx + rx * ca - ry * sa;
+    float oy = rcy + rx * sa + ry * ca;
+
+    float xPerc = fabs(fmod(ox, 1));
+    float yPerc = fabs(fmod(oy, 1));
+    int startx = (int) ox;
+    int starty = (int) oy;
+    
+    float4 i;
+    float4 mask;
+
+    float2 i1 = getFilterValue(filter, startx,     starty     , fSlice+subslice, filterSize);
+    float2 i2 = getFilterValue(filter, startx,     starty + 1 , fSlice+subslice, filterSize);
+    float2 i3 = getFilterValue(filter, startx + 1, starty     , fSlice+subslice, filterSize);
+    float2 i4 = getFilterValue(filter, startx + 1, starty + 1 , fSlice+subslice, filterSize);
+
+    i.x = i1.x; mask.x = i1.y;
+    i.y = i2.x; mask.y = i2.y;
+    i.z = i3.x; mask.z = i3.y;
+    i.w = i4.x; mask.w = i4.y;
+
+    float4 a;
+    a.x = (1 - xPerc) * (1 - yPerc);
+    a.y = (1 - xPerc) * (yPerc);
+    a.z = xPerc * (1 - yPerc);
+    a.w = xPerc * yPerc;
+    
+    float renormSum = dot(a,mask);
+    // don't write to the base slices
+    if ( slice -subslice == fSlice *fDim.z  ){
+        filter[rcsToIndex( (int3)(rcs.x,rcs.y,slice), filterSize)] = dot(i,a) / renormSum; 
+    }
+}
+
+// iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
+// oDim : (x,y,z) rowSize, sliceSize, hyperSliceSize of output.
+// filterDesc : (x,y) slicePerFeature, nrOfRotations.
+__kernel void maxRotation(
+    __global float* input,
+    __global float* valOutput,
+    __global float* rotOutput,
+    const int3 iDim,
+    const int3 oDim,
+    const int2 desc,
+    const float rotStepSize
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index,oDim);
+
+    int currentSlice = rcsh.z;
+    int spf = desc.x;
+    int nrOfRotations = desc.y;
+
+    int feature = currentSlice / spf;
+    int subslice = currentSlice % spf;
+    
+    float max = -1000000;
+    float rot = 0;
+    int baseSlice = feature * spf * nrOfRotations;
+    for(int r = 0 ; r < nrOfRotations; ++r ){
+        int inputIndex = rcshToIndex((int4)(rcsh.x ,rcsh.y, baseSlice + r * spf +subslice, rcsh.w),iDim);
+        float val = input[inputIndex];
+        if ( val > max ){
+            max = val;
+            rot = r * rotStepSize;
+        }
+    }
+    // int rotIndex = rcshToIndex((int4)(rcsh.x, rcsh.y, currentSlice*2, rcsh.w), (int3)( oDim.x, oDim.y, oDim.z*2));
+    // int valIndex = rotIndex + oDim.y; // next slice.
+    valOutput[index] = max;
+    rotOutput[index] = rot;
+}
+
+// iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
+// oDim : (x,y,z) rowSize, sliceSize, hyperSliceSize of output.
+// filterDesc : (x,y) slicePerFeature, nrOfRotations.
+__kernel void inverseMaxRotation(
+    __global float* valInput,
+    __global float* rotInput,
+    __global float* output,
+    const int3 iDim,
+    const int3 oDim,
+    const int2 desc,
+    const float rotStepSize
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index,iDim);
+    
+    int currentSlice = rcsh.z;
+    int spf = desc.x;
+    int nrOfRotations = desc.y;
+
+    int feature = currentSlice / spf;
+    int subslice = currentSlice % spf;
+
+    float value = valInput[index];
+    float rotation = rotInput[index];
+
+    int rotationIndex = round(rotation/rotStepSize);
+    
+    int oSlice = feature * spf * nrOfRotations +  rotationIndex *spf + subslice;
+    int oIndex = rcshToIndex( (int4)(rcsh.x, rcsh.y, oSlice, rcsh.w),oDim);
+    output[oIndex] = value;
+}
