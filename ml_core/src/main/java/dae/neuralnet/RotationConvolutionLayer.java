@@ -56,6 +56,10 @@ public class RotationConvolutionLayer implements ILayer {
      */
     private final imatrix weights;
     /**
+     * The rotated weights.
+     */
+    private final imatrix rotatedKernels;
+    /**
      * the new weights.
      */
     private final fmatrix newWeights;
@@ -65,22 +69,16 @@ public class RotationConvolutionLayer implements ILayer {
     private final imatrix inputs;
 
     /**
-     * The outputs of this layer, before selecting the maximum
-     * rotational activation.
-     */
-    private final fmatrix intermediateOutputs;
-    /**
-     * The outputs of this layer, the maximum activation is stored in
-     * the odd numbered slices, the rotational value in the even numbered
-     * slices.
+     * The outputs of this layer, before selecting the maximum rotational
+     * activation.
      */
     private final fmatrix outputs;
-    private final fmatrix outputVector;
+
     /**
      * The errors of this layer.
      */
     private final fmatrix errors;
-    private final imatrix flatErrorView;
+    //private final imatrix flatErrorView;
     /**
      * The deltas for this layer.
      */
@@ -105,9 +103,9 @@ public class RotationConvolutionLayer implements ILayer {
      * The gradient algorithm.
      */
     private GradientAlgorithm gradientAlgorithm;
-    
+
     private float startAngle = 0;
-    private float endAngle = (float) Math.PI;
+    private float endAngle = (float) (Math.PI - Math.PI / 8);
 
     /**
      * Creates a new convolution layer. The inputs of the convolutional layer
@@ -144,7 +142,7 @@ public class RotationConvolutionLayer implements ILayer {
      */
     public RotationConvolutionLayer(int wInputs, int hInputs, int sInputs, int features, int rotations, int filter, int stride, int batchSize, ActivationFunction af) {
         // filter weights are shared.
-        this(wInputs, hInputs, sInputs, features, rotations, filter, stride, batchSize, af, new fmatrix(filter, filter, sInputs * features * rotations));
+        this(wInputs, hInputs, sInputs, features, rotations, filter, stride, batchSize, af, new fmatrix(filter, filter, sInputs * features));
     }
 
     /**
@@ -168,9 +166,15 @@ public class RotationConvolutionLayer implements ILayer {
 
         this.weights = weights;
         this.gradientAlgorithm = new AdamGradientAlgorithm(weights);
-        newWeights = new fmatrix(filter, filter, sInputs * features);
+        this.newWeights = new fmatrix(filter, filter, sInputs * features);
+        this.rotatedKernels = new fmatrix(filter, filter, sInputs * features * rotations);
 
         int padding = (filter - 1) / 2;
+        int oR = 1 + (wInputs - filter + padding * 2) / stride;
+        int oC = 1 + (hInputs - filter + padding * 2) / stride;
+
+        outputs = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
+
         this.filterSize = filter;
         this.stride = stride;
         this.features = features;
@@ -179,19 +183,13 @@ public class RotationConvolutionLayer implements ILayer {
         inputs = new fmatrix(wInputs, hInputs, sInputs, batchSize, padding);
         backpropErrors = new fmatrix(wInputs, hInputs, sInputs, batchSize);
 
-        errors = new fmatrix(wInputs, hInputs, sInputs * features, batchSize);
-        flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
+        errors = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
+        //flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
 
-        int oR = 1 + (wInputs - filter + padding * 2) / stride;
-        int oC = 1 + (hInputs - filter + padding * 2) / stride;
-
-        intermediateOutputs = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
-        outputs = new fmatrix(oR, oC, sInputs * features * 2, batchSize);
-        outputVector = new fmatrix(intermediateOutputs.getHyperSliceSize(), 1, 1, batchSize);
-        deltas = new fmatrix(oR, oC, sInputs * features, batchSize);
+        deltas = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
         zpDeltas = new zpmatrix(deltas, padding);
 
-        derivatives = new fmatrix(oR, oC, sInputs * features, batchSize);
+        derivatives = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
         function = af;
 
         this.batchSize = batchSize;
@@ -210,6 +208,13 @@ public class RotationConvolutionLayer implements ILayer {
     @Override
     public void setName(String name) {
         this.name = name;
+        this.weights.setName("m_" + name + "_weights");
+        this.deltas.setName("m_" + name + "_deltas");
+        this.backpropErrors.setName("m_" + name + "_backpropErrors");
+        this.errors.setName("m_" + name + "_errors");
+        this.newWeights.setName("m_" + name + "_newWeights");
+        this.outputs.setName("m_" + name + "_outputs");
+        this.rotatedKernels.setName("m_" + name + "_rotatedKernels" );        
     }
 
     /**
@@ -229,7 +234,7 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public int getNrOfOutputs() {
-        return outputVector.getHyperSliceSize();
+        return outputs.getHyperSliceSize();
     }
 
     public int getNrOfFeatures() {
@@ -266,17 +271,16 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public void forward() {
-        fmatrix.rotateKernels(this.weights, features, rotations, startAngle, endAngle);
-        fmatrix.batchConvolve(inputs, this.weights, stride, this.intermediateOutputs);
+        fmatrix.rotateKernels(this.weights, rotations, startAngle, endAngle, this.rotatedKernels);
+        fmatrix.batchConvolve(inputs, this.rotatedKernels, stride, this.outputs);
 
         switch (function) {
             case SOFTMAX:
-                fmatrix.softMaxPerRow(intermediateOutputs);
+                fmatrix.softMaxPerRow(outputs);
                 break;
             default:
-                intermediateOutputs.applyFunction(this.function.getActivation());
+                outputs.applyFunction(this.function.getActivation());
         }
-        fmatrix.copyIntoSlice(intermediateOutputs, outputVector);
     }
 
     @Override
@@ -286,7 +290,9 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public void calculateNewWeights(float learningRate) {
-        fmatrix.batchConvolve(inputs, deltas, this.stride, newWeights);
+        rotatedKernels.reset();
+        fmatrix.batchConvolve(inputs, deltas, this.stride, rotatedKernels);
+        fmatrix.accumulateRotateKernels(rotatedKernels, rotations, startAngle, endAngle, newWeights);
     }
 
     @Override
@@ -311,19 +317,19 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public void writeOutputImage(String file) {
-        float max = this.intermediateOutputs.max().value;
-        float min = this.intermediateOutputs.min().value;
+        float max = this.outputs.max().value;
+        float min = this.outputs.min().value;
 
         float factor = 255f / (max - min);
         System.out.println("factor: " + factor);
 
-        BufferedImage bi = new BufferedImage(intermediateOutputs.getNrOfColumns(), (intermediateOutputs.getNrOfRows() + 5) * intermediateOutputs.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
-        for (int slice = 0; slice < intermediateOutputs.getNrOfSlices(); ++slice) {
-            for (int r = 0; r < intermediateOutputs.getNrOfRows(); ++r) {
-                for (int c = 0; c < intermediateOutputs.getNrOfColumns(); ++c) {
-                    float p = intermediateOutputs.get(r, c, slice);
+        BufferedImage bi = new BufferedImage(outputs.getNrOfColumns(), (outputs.getNrOfRows() + 5) * outputs.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
+        for (int slice = 0; slice < outputs.getNrOfSlices(); ++slice) {
+            for (int r = 0; r < outputs.getNrOfRows(); ++r) {
+                for (int c = 0; c < outputs.getNrOfColumns(); ++c) {
+                    float p = outputs.get(r, c, slice);
                     int pi = (int) Math.round((p - min) * factor);
-                    bi.setRGB(c, r + slice * (intermediateOutputs.getNrOfRows() + 5), (pi << 16) + (pi << 8) + pi);
+                    bi.setRGB(c, r + slice * (outputs.getNrOfRows() + 5), (pi << 16) + (pi << 8) + pi);
                 }
             }
         }
@@ -344,7 +350,7 @@ public class RotationConvolutionLayer implements ILayer {
         // Note: derivative is f'(net input) but this is typically expressed
         // in terms of the output of the activation function.
         // 2.a copy the outputs into the derivatives matrix.
-        fmatrix.copyInto(this.intermediateOutputs, this.derivatives);
+        fmatrix.copyInto(this.outputs, this.derivatives);
 
         // 2.b apply the derivative of the activation function to the output.
         fmatrix.applyDerivedActivation(function, derivatives);
@@ -373,12 +379,12 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public imatrix getErrors() {
-        return this.flatErrorView;
+        return this.errors;
     }
 
     @Override
     public fmatrix getOutputs() {
-        return outputVector;
+        return outputs;
     }
 
     @Override

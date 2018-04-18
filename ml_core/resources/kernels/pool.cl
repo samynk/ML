@@ -106,3 +106,96 @@ __kernel void backpropMaxpool(
         O[oIndex] = 0;
     }
 }
+
+__kernel void maxRotationPool(
+    const __global float* I,
+    __global float* O,
+    __global int* M,
+    // the dimensions of the the input matrix.
+    const int3 iDim,
+    // the scale of the max pool filter.
+    const int2 fDim,
+    // the dimensions of the output matrix.
+    const int3 oDim,
+    // the dimensions of the mask matrix.
+    const int3 mDim,
+    // the batch size,
+    const int batchSize
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, mDim);
+    // rcsh.z contains the current filter nr.
+    int iRow = rcsh.x * fDim.x;
+    int iCol = rcsh.y * fDim.y;
+    int slice = rcsh.z * 2;
+    int hyperSlice = rcsh.w;
+    
+    float m = -100000.0f;
+    float rot;
+    
+    int cell = 0;
+    if( hyperSlice < batchSize ){
+        for(int r = 0; r < fDim.x; ++r )
+        {
+            for (int c =0; c < fDim.y; ++c )
+            {        
+                int ivIndex = rcshToIndex( (int4)(iRow+r,iCol+c,slice,hyperSlice) , iDim);
+                float value = I[ivIndex];
+                if(value > m )
+                {
+                    m = value;
+                    cell = r + c*fDim.x;
+                    rot = I[ivIndex+iDim.y]; // one slice further. 
+                
+                }
+            }
+        }
+    
+        M[index] = cell;
+        int ovIndex = rcshToIndex((int4)(rcsh.xy, slice, rcsh.w),oDim);
+        O[ovIndex] = m ;
+        O[ovIndex + oDim.y] = rot;
+    }
+}
+
+__kernel void backpropMaxRotationPool(
+    __global float* I,
+    __global float* O,
+    __global int* M,
+    // the dimensions of the the input matrix.
+    const int3 iDim,
+    // the scale of the max pool filter.
+    const int2 fDim,
+    // the dimensions of the output matrix.
+    const int3 oDim,
+    // the dimensions of the mask matrix.
+    const int3 mDim
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
+    
+    int gCol = rcsh.x; 
+    int gRow = rcsh.y;
+    int slice = rcsh.z;
+    int hyperSlice = rcsh.w;
+    
+    int iRB = gRow / fDim.x;
+    int iCB = gCol / fDim.y;
+
+    int mIndex = rcshToIndex( (int4)(iRB,iCB,slice/2,hyperSlice),mDim);
+    int cell = M[mIndex];
+
+    int2 oCoord = (int2)( cell%fDim.x, cell/fDim.x );
+    int2 iCoord = (int2)( gRow%fDim.y, gCol%fDim.x );
+
+    int oIndex = rcshToIndex( (int4)(gRow,gCol,slice,hyperSlice),oDim);
+
+    if(oCoord.x == iCoord.x && oCoord.y == iCoord.y){
+        int iIndex = rcshToIndex( (int4)(iRB,iCB,slice,hyperSlice),iDim);
+        O[oIndex] = I[iIndex];
+    }else{
+        O[oIndex] = 0;
+    }
+}

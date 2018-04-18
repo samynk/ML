@@ -50,9 +50,9 @@ public class FMatrixOpGpu implements FMatrixOp {
         FloatDeviceBuffer ADB = A.getDeviceBuffer();
         FloatDeviceBuffer BDB = B.getDeviceBuffer();
         FloatDeviceBuffer CDB = C.getDeviceBuffer();
-        cl_mem memA = ADB.uploadRMatrix();
-        cl_mem memB = BDB.uploadRMatrix();
-        cl_mem memC = CDB.uploadRWMatrix();
+        cl_mem memA = ADB.upload();
+        cl_mem memB = BDB.upload();
+        cl_mem memC = CDB.upload();
         // Execute GEMM:
         // C = alpha * A * B + beta * C
         cl_event event = new cl_event();
@@ -67,7 +67,7 @@ public class FMatrixOpGpu implements FMatrixOp {
                 memC, 0, cDim.ld,
                 GPU.CL_COMMAND_QUEUE, event);
 
-        CDB.markRWMatrixAsMaster();
+        CDB.markGpuAsMaster();
     }
 
     private void determineLayout(imatrix m, mdim2D dim) {
@@ -276,6 +276,33 @@ public class FMatrixOpGpu implements FMatrixOp {
     @Override
     public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, scaleX, scaleY, output);
+    }
+    
+    /**
+     * The input contains data per two slices. The even slices contain the value 
+     * data, the oneven slices contain the rotation data. The max pooling is 
+     * applied to the value data, with conservation of the rotation data.
+     * @param input the input matrix with value and rotation slices.
+     * @param output the scale output matrix with value and rotation slices.
+     * @param maskLayer the layer that contains the cells with the maximum value.
+     */
+    @Override
+    public void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer){
+        GPU.KERNEL_POOL.maxRotationPool(input, output, maskLayer);
+    }
+    
+    /**
+     * Transfers the maximum values into the output matrix at the correct cell
+     * location as indicated by the masklayer.
+     *
+     * @param input the input matrix, a downscaled version of the output matrix.
+     * @param maskLayer the mask layer that guides the transfer of values to the
+     * output matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output){
+         GPU.KERNEL_POOL.backpropMaxRotationPool(input, maskLayer, output);
     }
 
     @Override
@@ -498,6 +525,34 @@ public class FMatrixOpGpu implements FMatrixOp {
     }
 
     /**
+     * Copies the slices of matrix1 and matrix2 into the destination matrix. One
+     * slice of the destination matrix will be composed of the concatenation of
+     * a slice of the first matrix and a slice of the second matrix.
+     *
+     * @param matrix1 the first matrix.
+     * @param matrix2 the second matrix.
+     * @param dest the destination matrix.
+     */
+    @Override
+    public void zip(imatrix matrix1, imatrix matrix2, imatrix dest) {
+        GPU.zip(matrix1, matrix2, dest);
+    }
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The even
+     * slices will be copied into the first destination matrix, the uneven
+     * slices will be copied into the second destination matrix.
+     *
+     * @param src the source matrix.
+     * @param dest1 the first destination matrix.
+     * @param dest2 the second destination matrix.
+     */
+    @Override
+    public void unzip(imatrix src, imatrix dest1, imatrix dest2) {
+        GPU.unzip(src, dest1, dest2);
+    }
+
+    /**
      * Applies the activation function on the given matrix.
      *
      * @param function the function that defines the derived activation
@@ -559,14 +614,29 @@ public class FMatrixOpGpu implements FMatrixOp {
      * angle of the first slice.
      *
      * @param filter the kernel to rotate.
-     * @param nrOfFeatures the number of features in the kernel.
      * @param nrOfRotations the number of rotations.
      * @param minAngle the start angle, first slice included.
      * @param maxAngle the end angle.
+     * @param output the output of the rotation.
      */
     @Override
-    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
-        GPU.KERNEL_CONVOLV.rotateKernels(filter, nrOfFeatures, nrOfRotations, minAngle, maxAngle);
+    public void rotateKernels(imatrix filter, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+        GPU.KERNEL_CONVOLV.rotateKernels(filter, nrOfRotations, minAngle, maxAngle, output);
+    }
+
+    /**
+     * Accumulates the output rotations into a kernel. The start angle indicates
+     * the angle of the first slice.
+     *
+     * @param rotatedOutput the kernel to rotate.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     * @param kernelOutput the output of the rotation.
+     */
+    @Override
+    public void accumulateRotateKernels(imatrix rotatedOutput, int nrOfRotations, float minAngle, float maxAngle, imatrix kernelOutput) {
+        GPU.KERNEL_CONVOLV.accumulateRotateKernels(rotatedOutput, nrOfRotations, minAngle, maxAngle, kernelOutput);
     }
 
     /**
@@ -578,17 +648,20 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @param nrOfRotations number of rotations per feature.
      * @param minAngle the minimum angle of the rotation.
      * @param maxAngle the maximum angle of the rotation.
-     * @param valOutput the output matrix of this function that contains the maximum activation values.
-     * @param rotOutput the output matrix of this function that contains the rotation values.
+     * @param valOutput the output matrix of this function that contains the
+     * maximum activation values.
+     * @param rotOutput the output matrix of this function that contains the
+     * rotation values.
      */
     @Override
     public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix valOutput, imatrix rotOutput) {
         GPU.KERNEL_CONVOLV.maxRotation(input, nrOfFeatures, nrOfRotations, minAngle, maxAngle, valOutput, rotOutput);
     }
-    
+
     /**
-     * Performs the inverse operation of the maxRotation and stores the given value according the the rotation stored in rotInput
-     * 
+     * Performs the inverse operation of the maxRotation and stores the given
+     * value according the the rotation stored in rotInput
+     *
      * @param valInput the activation values.
      * @param rotInput the rotation values.
      * @param nrOfFeatures the number of features in the convolution layer.
@@ -598,14 +671,13 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @param output the result of the inverse operation.
      */
     @Override
-    public void maxInverseRotation(imatrix valInput,imatrix rotInput,  int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output){
+    public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
         GPU.KERNEL_CONVOLV.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
     }
 
     @Override
     public void reset(fmatrix m) {
-        GPU.zeroFillR(m);
-        m.getDeviceBuffer().markRMatrixAsMaster();
+        GPU.zeroFill(m);
     }
 
     /**

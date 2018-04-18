@@ -90,6 +90,6 @@ public class ActivationKernel extends OpenCLKernel {
     
     public void didentity(imatrix O) {
         GPU.fillR(O,1.0f);
-        O.getDeviceBuffer().markRMatrixAsMaster();
+        O.getDeviceBuffer().markGpuAsMaster();
     }
 }

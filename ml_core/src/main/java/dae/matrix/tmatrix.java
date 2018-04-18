@@ -13,6 +13,7 @@ public class tmatrix implements imatrix {
 
     private imatrix source;
     private final static tmatrix HELPER = new tmatrix(null);
+    private String name;
 
     public tmatrix(imatrix source) {
         this.source = source;
@@ -25,7 +26,21 @@ public class tmatrix implements imatrix {
      */
     @Override
     public String getName() {
-        return source.getName() + "t";
+        if (name == null) {
+            return source.getName() + "_t";
+        } else {
+            return name;
+        }
+    }
+
+    /**
+     * Sets the name of the matrix object.
+     *
+     * @param name the name of the object.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     /**
@@ -37,7 +52,7 @@ public class tmatrix implements imatrix {
     public boolean isRowVector() {
         return source.getNrOfColumns() == 1 && getNrOfSlices() == 1;
     }
-    
+
     /**
      * Checks if this matrix is a batch matrix, in other words it is a multiple
      * of a row vector.
@@ -169,7 +184,7 @@ public class tmatrix implements imatrix {
     public int getSliceSize() {
         return source.getSliceSize();
     }
-    
+
     @Override
     public int getHyperSliceSize() {
         return source.getHyperSliceSize();

@@ -65,9 +65,9 @@ public class MatrixOpKernel extends OpenCLKernel {
 
     public imatrix dotadd(imatrix O, imatrix op1, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        cl_mem memOutput = oDB.getRWMem();
-        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
+        cl_mem memOutput = oDB.getMem();
+        cl_mem mem_op1 = op1.getDeviceBuffer().upload();
+        cl_mem mem_op2 = op2.getDeviceBuffer().upload();
 
         clSetKernelArg(dotadd, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
         clSetKernelArg(dotadd, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
@@ -84,17 +84,17 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 
     public imatrix dotadd(imatrix O, float factor1, imatrix op1, float factor2, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
         float[] factors = new float[]{factor1, factor2};
-        cl_mem memOutput = oDB.getRWMem();
+        cl_mem memOutput = oDB.getMem();
 
-        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = op1.getDeviceBuffer().upload();
+        cl_mem mem_op2 = op2.getDeviceBuffer().upload();
 
         clSetKernelArg(dotaddlc, 0, Sizeof.cl_float2, Pointer.to(factors));
         clSetKernelArg(dotaddlc, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
@@ -112,7 +112,7 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 
@@ -120,9 +120,9 @@ public class MatrixOpKernel extends OpenCLKernel {
         FloatDeviceBuffer oDB = output.getDeviceBuffer();
         FloatDeviceBuffer iDB = input.getDeviceBuffer();
         int[] h = new int[]{input.getNrOfHyperSlices(), input.getHyperSliceSize()};
-        cl_mem memOutput = oDB.getRWMem();
-        GPU.zeroFillRW(output);
-        cl_mem mem_op1 = input.getDeviceBuffer().uploadRMatrix();
+        cl_mem memOutput = oDB.getMem();
+        GPU.zeroFill(output);
+        cl_mem mem_op1 = input.getDeviceBuffer().upload();
 
         clSetKernelArg(sumPerRow, 0, Sizeof.cl_int2, Pointer.to(h));
         clSetKernelArg(sumPerRow, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
@@ -138,16 +138,16 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
     }
 
     public imatrix adamVelocity(imatrix O, float beta2, imatrix previousVelocity, imatrix currentGradient) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
         float[] factors = new float[]{beta2};
-        cl_mem memOutput = oDB.getRWMem();
+        cl_mem memOutput = oDB.getMem();
 
-        cl_mem mem_op1 = previousVelocity.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = currentGradient.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = previousVelocity.getDeviceBuffer().upload();
+        cl_mem mem_op2 = currentGradient.getDeviceBuffer().upload();
 
         clSetKernelArg(adamVelocity, 0, Sizeof.cl_float, Pointer.to(factors));
         clSetKernelArg(adamVelocity, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
@@ -165,17 +165,17 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 
     public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity) {
         FloatDeviceBuffer oDB = weights.getDeviceBuffer();
         float[] factors = new float[]{eta, 1f / (1 - beta1), 1f / (1 - beta2), epsilon};
-        cl_mem memOutput = oDB.uploadRWMatrix();
+        cl_mem memOutput = oDB.upload();
 
-        cl_mem mem_op1 = moment.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = velocity.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = moment.getDeviceBuffer().upload();
+        cl_mem mem_op2 = velocity.getDeviceBuffer().upload();
 
         clSetKernelArg(adamAdaptWeights, 0, Sizeof.cl_float4, Pointer.to(factors));
         clSetKernelArg(adamAdaptWeights, 1, Sizeof.cl_mem, Pointer.to(mem_op1));
@@ -193,16 +193,16 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return weights;
     }
 
     public imatrix dotsubtract(imatrix O, imatrix op1, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        cl_mem memOutput = oDB.getRWMem();
+        cl_mem memOutput = oDB.getMem();
 
-        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = op1.getDeviceBuffer().upload();
+        cl_mem mem_op2 = op2.getDeviceBuffer().upload();
 
         clSetKernelArg(dotsubtract, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
         clSetKernelArg(dotsubtract, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
@@ -218,16 +218,16 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 
     public imatrix dotmultiply(imatrix O, imatrix op1, imatrix op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        cl_mem memOutput = oDB.getRWMem();
+        cl_mem memOutput = oDB.getMem();
 
-        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
-        cl_mem mem_op2 = op2.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = op1.getDeviceBuffer().upload();
+        cl_mem mem_op2 = op2.getDeviceBuffer().upload();
 
         clSetKernelArg(dotmultiply, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
         clSetKernelArg(dotmultiply, 1, Sizeof.cl_mem, Pointer.to(mem_op2));
@@ -244,15 +244,15 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 
     public imatrix dotmultiply(imatrix O, imatrix op1, float op2) {
         FloatDeviceBuffer oDB = O.getDeviceBuffer();
-        cl_mem memOutput = oDB.getRWMem();
+        cl_mem memOutput = oDB.getMem();
 
-        cl_mem mem_op1 = op1.getDeviceBuffer().uploadRMatrix();
+        cl_mem mem_op1 = op1.getDeviceBuffer().upload();
 
         clSetKernelArg(dotmultiplyfactor, 0, Sizeof.cl_mem, Pointer.to(mem_op1));
         clSetKernelArg(dotmultiplyfactor, 1, Sizeof.cl_float, Pointer.to(new float[]{op2}));
@@ -269,7 +269,7 @@ public class MatrixOpKernel extends OpenCLKernel {
                 null,
                 null);
 
-        oDB.markRWMatrixAsMaster();
+        oDB.markGpuAsMaster();
         return O;
     }
 

@@ -145,6 +145,16 @@ public class fmatrix implements imatrix {
     public String getName() {
         return name;
     }
+    
+    /**
+     * Sets the name of the matrix object.
+     * 
+     * @param name the name of the object.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name;
+    }
 
     /**
      * Checks if this matrix is a row vector.
@@ -1183,6 +1193,23 @@ public class fmatrix implements imatrix {
     public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         matrixOp.batchBackpropMaxPool(input, maskLayer, scaleX, scaleY, output);
     }
+    
+    public static void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer){
+        matrixOp.maxRotationPool(input,output,maskLayer);
+    }
+    
+    /**
+     * Transfers the maximum values into the output matrix at the correct cell
+     * location as indicated by the masklayer.
+     *
+     * @param input the input matrix, a downscaled version of the output matrix.
+     * @param maskLayer the mask layer that guides the transfer of values to the
+     * output matrix.
+     * @param output the output matrix.
+     */
+    public static void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output){
+        matrixOp.backpropMaxRotationPool(input, maskLayer, output);
+    }
 
     /**
      * Applies the activation function on the given matrix.
@@ -1212,13 +1239,27 @@ public class fmatrix implements imatrix {
      * angle of the first slice.
      *
      * @param filter the kernel to rotate.
-     * @param nrOfFeatures the number of features in the kernel.
      * @param nrOfRotations the number of rotations.
      * @param minAngle the start angle, first slice included.
      * @param maxAngle the end angle.
+     * @param output the output of the rotation.
      */
-    public static void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
-        matrixOp.rotateKernels(filter, nrOfFeatures, nrOfRotations, minAngle, maxAngle);
+    public static void rotateKernels(imatrix filter, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+        matrixOp.rotateKernels(filter, nrOfRotations, minAngle, maxAngle, output);
+    }
+
+    /**
+     * Accumulates the output rotations into a kernel. The start angle indicates
+     * the angle of the first slice.
+     *
+     * @param rotatedOutput the kernel to rotate.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     * @param kernelOutput the output of the rotation.
+     */
+    public static void accumulateRotateKernels(imatrix rotatedOutput, int nrOfRotations, float minAngle, float maxAngle, imatrix kernelOutput) {
+        matrixOp.accumulateRotateKernels(rotatedOutput, nrOfRotations, minAngle, maxAngle, kernelOutput);
     }
 
     /**
@@ -1232,8 +1273,24 @@ public class fmatrix implements imatrix {
      * @param maxAngle the maximum angle of the rotation.
      * @param output the output of this function.
      */
-    public static void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output,imatrix rotOutput) {
-        matrixOp.maxRotation(input, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output,rotOutput);
+    public static void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output, imatrix rotOutput) {
+        matrixOp.maxRotation(input, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output, rotOutput);
+    }
+
+    /**
+     * Performs the inverse operation of the maxRotation and stores the given
+     * value according the the rotation stored in rotInput
+     *
+     * @param valInput the activation values.
+     * @param rotInput the rotation values.
+     * @param nrOfFeatures the number of features in the convolution layer.
+     * @param nrOfRotations the number of rotations per features.
+     * @param minAngle the minAngle of the rotations.
+     * @param maxAngle the maxAngle of the rotations.
+     * @param output the result of the inverse operation.
+     */
+    public static void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+        matrixOp.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -1439,6 +1496,32 @@ public class fmatrix implements imatrix {
     }
 
     /**
+     * Copies the slices of matrix1 and matrix2 into the destination matrix. One
+     * slice of the destination matrix will be composed of the concatenation of
+     * a slice of the first matrix and a slice of the second matrix.
+     *
+     * @param matrix1 the first matrix.
+     * @param matrix2 the second matrix.
+     * @param dest the destination matrix.
+     */
+    public static void zip(imatrix matrix1, imatrix matrix2, imatrix dest) {
+        matrixOp.zip(matrix1, matrix2, dest);
+    }
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The even
+     * slices will be copied into the first destination matrix, the uneven
+     * slices will be copied into the second destination matrix.
+     *
+     * @param src the source matrix.
+     * @param dest1 the first destination matrix.
+     * @param dest2 the second destination matrix.
+     */
+    public static void unzip(imatrix src, imatrix dest1, imatrix dest2) {
+        matrixOp.unzip(src, dest1, dest2);
+    }
+
+    /**
      * Copies the first row of every hyperslice of the source matrix into the
      * destination matrix according to a column major ordering.
      *
@@ -1621,29 +1704,32 @@ public class fmatrix implements imatrix {
         }
     }
 
-    public static void writeAs3DImage(imatrix m, int slicesPerRow, int padding, Path location) {
+    public static void writeAs3DImage(imatrix m, int slicesPerColumn, int padding, Path location) {
         float max = m.max().value;
         float min = m.min().value;
 
-        float factor = 255f / (max - min);
+        float posFactor = 255f / max;
+        float negFactor = 255f / min;
         // (x-min)*factor
 
-        int nrOfSlicesCols = (m.getNrOfSlices() / slicesPerRow) + 1;
+        int nrOfSlicesCols = (m.getNrOfSlices() / slicesPerColumn) + 1;
 
         BufferedImage bi = new BufferedImage(
                 (m.getNrOfColumns() + padding) * nrOfSlicesCols,
-                (m.getNrOfRows() + padding) * slicesPerRow,
-                BufferedImage.TYPE_BYTE_GRAY);
+                (m.getNrOfRows() + padding) * slicesPerColumn,
+                BufferedImage.TYPE_3BYTE_BGR);
 
         for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
-            int imageRowB = (slice % slicesPerRow) * (m.getNrOfRows() + padding);
-            int imageColB = (slice / slicesPerRow) * (m.getNrOfColumns() + padding);
+            int imageRowB = (slice % slicesPerColumn) * (m.getNrOfRows() + padding);
+            int imageColB = (slice / slicesPerColumn) * (m.getNrOfColumns() + padding);
 
             for (int r = 0; r < m.getNrOfRows(); ++r) {
                 for (int c = 0; c < m.getNrOfColumns(); ++c) {
-                    float p = (m.get(r, c, slice) - min) * factor;
+                    float v = m.get(r, c, slice);
+                    float p = v < 0 ? v * negFactor : v * posFactor;
                     int pi = (int) Math.round(p);
-                    bi.setRGB(imageColB + c, imageRowB + r, (pi << 16) + (pi << 8) + pi);
+                    
+                    bi.setRGB(imageColB + c, imageRowB + r, v < 0 ?  (pi << 16) : pi);
                 }
             }
         }
@@ -1713,7 +1799,7 @@ public class fmatrix implements imatrix {
 
     @Override
     public void makeMaster() {
-        deviceBuffer.markCpuMatrixAsMatrix();
+        deviceBuffer.markCpuAsMaster();
     }
 
 }

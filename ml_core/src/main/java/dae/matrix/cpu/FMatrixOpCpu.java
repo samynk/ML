@@ -135,8 +135,6 @@ public class FMatrixOpCpu implements FMatrixOp {
 
     private float max(int or, int oc, int slice, int h, int filterCols, int filterRows, imatrix input, intmatrix maskLayer) {
         float m = -Float.MAX_VALUE;
-        int imx = 0;
-        int imy = 0;
         int cell = 0;
         for (int c = 0; c < filterCols; ++c) {
             for (int r = 0; r < filterRows; ++r) {
@@ -152,6 +150,94 @@ public class FMatrixOpCpu implements FMatrixOp {
         }
         maskLayer.set(or, oc, slice, h, cell);
         return m;
+    }
+
+    /**
+     * The input contains data per two slices. The even slices contain the value
+     * data, the oneven slices contain the rotation data. The max pooling is
+     * applied to the value data, with conservation of the rotation data.
+     *
+     * @param input the input matrix with value and rotation slices.
+     * @param output the scale output matrix with value and rotation slices.
+     * @param maskLayer the layer that contains the cells with the maximum
+     * value.
+     */
+    @Override
+    public void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer) {
+        // set all values to zero
+        maskLayer.reset();
+
+        int scaleX = input.getNrOfColumns() / output.getNrOfColumns();
+        int scaleY = input.getNrOfRows() / output.getNrOfRows();
+
+        int slices = maskLayer.getNrOfSlices();
+
+        for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < slices; ++slice) {
+                for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
+                    for (int or = 0; or < output.getNrOfRows(); ++or) {
+                        maxRotation(or, oc, slice, h, scaleX, scaleY, input, output, maskLayer);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Transfers the maximum values into the output matrix at the correct cell
+     * location as indicated by the masklayer.
+     *
+     * @param input the input matrix, a downscaled version of the output matrix.
+     * @param maskLayer the mask layer that guides the transfer of values to the
+     * output matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output) {
+        int scaleX = output.getNrOfColumns() / input.getNrOfColumns();
+        int scaleY = output.getNrOfRows() / input.getNrOfRows();
+
+        int slices = Math.min(input.getNrOfSlices(), output.getNrOfSlices());
+        int hyperSlices = Math.min(input.getNrOfHyperSlices(), output.getNrOfHyperSlices());
+
+        for (int h = 0; h < hyperSlices; ++h) {
+            for (int slice = 0; slice < slices; ++slice) {
+                for (int ic = 0; ic < input.getNrOfColumns(); ++ic) {
+                    for (int ir = 0; ir < input.getNrOfRows(); ++ir) {
+                        int oc = ic * scaleX;
+                        int or = ir * scaleY;
+                        int cell = maskLayer.get(ir, ic, slice / 2, h);
+                        int x = cell / scaleY;
+                        int y = cell % scaleY;
+                        float v = input.get(ir, ic, slice, h);
+                        output.set(or + y, oc + x, slice, h, v);
+                    }
+                }
+            }
+        }
+    }
+
+    private void maxRotation(int or, int oc, int slice, int h, int filterCols, int filterRows, imatrix input, imatrix output, intmatrix maskLayer) {
+        float m = -Float.MAX_VALUE;
+        float rot = -Float.MAX_VALUE;
+        int cell = 0;
+        for (int c = 0; c < filterCols; ++c) {
+            for (int r = 0; r < filterRows; ++r) {
+                int ix = or * filterRows + r;
+                int iy = oc * filterRows + c;
+                float value = input.get(ix, iy, slice * 2, h);
+
+                if (value > m) {
+                    m = value;
+                    rot = input.get(ix, iy, slice * 2 + 1, h);
+                    cell = r + c * filterRows;
+                }
+
+            }
+        }
+        output.set(or, oc, slice * 2, h, m);
+        output.set(or, oc, slice * 2 + 1, h, rot);
+        maskLayer.set(or, oc, slice, h, cell);
     }
 
     /**
@@ -694,23 +780,20 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     /**
-     * Rotates a kernel. The first slice will be preserved and rotated copies
-     * will be generated in the subsequent slices. The start angle indicates the
-     * angle of the first slice.
+     * Rotates a kernel. The start angle indicates the angle of the first slice.
      *
      * @param filter the kernel to rotate.
-     * @param nrOfFeatures the number of features in the kernel.
      * @param nrOfRotations the number of rotations.
      * @param minAngle the start angle, first slice included.
      * @param maxAngle the end angle.
+     * @param output the output of the rotation.
      */
     @Override
-    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
-        int slices = filter.getNrOfSlices();
-        fmatrix sincos = new fmatrix(2, slices);
+    public void rotateKernels(imatrix filter, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+        fmatrix sincos = new fmatrix(2, nrOfRotations);
         float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
         float angle = minAngle;
-        for (int i = 0; i < slices; ++i) {
+        for (int i = 0; i < nrOfRotations; ++i) {
             float s = (float) Math.sin(angle);
             float c = (float) Math.cos(angle);
             sincos.set(0, i, s);
@@ -718,59 +801,127 @@ public class FMatrixOpCpu implements FMatrixOp {
             angle += angleStep;
         }
 
-        // slices per feature
-        int sPRF = filter.getNrOfSlices() / nrOfFeatures;
-        // slices per rotation.
-        int sPRR = sPRF / nrOfRotations;
+        float2 mask = new float2();
+
+        for (int oSlice = 0; oSlice < output.getNrOfSlices(); ++oSlice) {
+            int rot = oSlice % nrOfRotations;
+            int baseSlice = oSlice / nrOfRotations;
+
+            float sa = (float) sincos.get(0, rot);
+            float ca = (float) sincos.get(1, rot);
+            float rcx = filter.getNrOfColumns() / 2.0f;
+            float rcy = filter.getNrOfRows() / 2.0f;
+
+            for (int x = 0; x < filter.getNrOfColumns(); ++x) {
+                for (int y = 0; y < filter.getNrOfRows(); ++y) {
+                    float rx = x - rcx;
+                    float ry = y - rcy;
+
+                    float ox = rcx + rx * ca - ry * sa;
+                    float oy = rcy + rx * sa + ry * ca;
+
+                    float xPerc = Math.abs(ox % 1);
+                    float yPerc = Math.abs(oy % 1);
+                    int startx = (int) ox;
+                    int starty = (int) oy;
+
+                    getKernelValue(filter, startx, starty, baseSlice, mask);
+                    float i1 = mask.x;
+                    float m1 = mask.y;
+                    getKernelValue(filter, startx, starty + 1, baseSlice, mask);
+                    float i2 = mask.x;
+                    float m2 = mask.y;
+                    getKernelValue(filter, startx + 1, starty, baseSlice, mask);
+                    float i3 = mask.x;
+                    float m3 = mask.y;
+                    getKernelValue(filter, startx + 1, starty + 1, baseSlice, mask);
+                    float i4 = mask.x;
+                    float m4 = mask.y;
+
+                    float a1 = (1 - xPerc) * (1 - yPerc);
+                    float a2 = (1 - xPerc) * (yPerc);
+                    float a3 = xPerc * (1 - yPerc);
+                    float a4 = xPerc * yPerc;
+
+                    float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
+                    float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
+                    output.set(y, x, oSlice, Math.abs(norm) < 0.00001f ? value : value / norm);
+                }
+            }
+        }
+    }
+
+    /**
+     * Accumulates the output rotations into a kernel. The start angle indicates
+     * the angle of the first slice.
+     *
+     * @param rotatedOutput the kernel to rotate.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     * @param kernelOutput the output of the rotation.
+     */
+    @Override
+    public void accumulateRotateKernels(imatrix rotatedOutput, int nrOfRotations, float minAngle, float maxAngle, imatrix kernelOutput) {
+        fmatrix sincos = new fmatrix(2, nrOfRotations);
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
+        float angle = minAngle;
+        for (int i = 0; i < nrOfRotations; ++i) {
+            float s = (float) Math.sin(-angle);
+            float c = (float) Math.cos(-angle);
+            sincos.set(0, i, s);
+            sincos.set(1, i, c);
+            angle += angleStep;
+        }
 
         float2 mask = new float2();
 
-        for (int f = 0; f < nrOfFeatures; ++f) {
-            for (int rot = 1; rot < nrOfRotations; ++rot) {
-                for (int s = 0; s < sPRR; ++s) {
-                    int baseSlice = f * sPRF + s;
-                    int currentSlice = f * sPRF + sPRR * rot + s;
+        for (int oSlice = 0; oSlice < kernelOutput.getNrOfSlices(); ++oSlice) {
+            for (int rot = 0; rot < nrOfRotations; ++rot) {
+                int inputSlice = oSlice * nrOfRotations + rot;
 
-                    float sa = (float) sincos.get(0, rot);
-                    float ca = (float) sincos.get(1, rot);
-                    float rcx = filter.getNrOfColumns() / 2.0f;
-                    float rcy = filter.getNrOfRows() / 2.0f;
+                float sa = (float) sincos.get(0, rot);
+                float ca = (float) sincos.get(1, rot);
+                float rcx = kernelOutput.getNrOfColumns() / 2.0f;
+                float rcy = kernelOutput.getNrOfRows() / 2.0f;
 
-                    for (int x = 0; x < filter.getNrOfColumns(); ++x) {
-                        for (int y = 0; y < filter.getNrOfRows(); ++y) {
-                            float rx = x - rcx;
-                            float ry = y - rcy;
+                for (int x = 0; x < kernelOutput.getNrOfColumns(); ++x) {
+                    for (int y = 0; y < kernelOutput.getNrOfRows(); ++y) {
+                        float rx = x - rcx;
+                        float ry = y - rcy;
 
-                            float ox = rcx + rx * ca - ry * sa;
-                            float oy = rcy + rx * sa + ry * ca;
+                        float ox = rcx + rx * ca - ry * sa;
+                        float oy = rcy + rx * sa + ry * ca;
 
-                            float xPerc = Math.abs(ox % 1);
-                            float yPerc = Math.abs(oy % 1);
-                            int startx = (int) ox;
-                            int starty = (int) oy;
+                        float xPerc = Math.abs(ox % 1);
+                        float yPerc = Math.abs(oy % 1);
+                        int startx = (int) ox;
+                        int starty = (int) oy;
 
-                            getKernelValue(filter, startx, starty, baseSlice, mask);
-                            float i1 = mask.x;
-                            float m1 = mask.y;
-                            getKernelValue(filter, startx, starty + 1, baseSlice, mask);
-                            float i2 = mask.x;
-                            float m2 = mask.y;
-                            getKernelValue(filter, startx + 1, starty, baseSlice, mask);
-                            float i3 = mask.x;
-                            float m3 = mask.y;
-                            getKernelValue(filter, startx + 1, starty + 1, baseSlice, mask);
-                            float i4 = mask.x;
-                            float m4 = mask.y;
+                        getKernelValue(rotatedOutput, startx, starty, inputSlice, mask);
+                        float i1 = mask.x;
+                        float m1 = mask.y;
+                        getKernelValue(rotatedOutput, startx, starty + 1, inputSlice, mask);
+                        float i2 = mask.x;
+                        float m2 = mask.y;
+                        getKernelValue(rotatedOutput, startx + 1, starty, inputSlice, mask);
+                        float i3 = mask.x;
+                        float m3 = mask.y;
+                        getKernelValue(rotatedOutput, startx + 1, starty + 1, inputSlice, mask);
+                        float i4 = mask.x;
+                        float m4 = mask.y;
 
-                            float a1 = (1 - xPerc) * (1 - yPerc);
-                            float a2 = (1 - xPerc) * (yPerc);
-                            float a3 = xPerc * (1 - yPerc);
-                            float a4 = xPerc * yPerc;
+                        float a1 = (1 - xPerc) * (1 - yPerc);
+                        float a2 = (1 - xPerc) * (yPerc);
+                        float a3 = xPerc * (1 - yPerc);
+                        float a4 = xPerc * yPerc;
 
-                            float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
-                            float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
-                            filter.set(y, x, currentSlice, value / norm);
-                        }
+                        float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
+                        float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
+
+                        float result = Math.abs(norm) < 0.00001f ? value : value / norm;
+                        float current = kernelOutput.get(y, x, oSlice);
+                        kernelOutput.set(y, x, oSlice, current + result);
                     }
                 }
             }
@@ -789,7 +940,9 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param output the output of this function.
      */
     @Override
-    public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output, imatrix rotOutput) {
+    public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output,
+            imatrix rotOutput
+    ) {
         int spf = output.getNrOfSlices() / nrOfFeatures;
         float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
         for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
@@ -831,7 +984,9 @@ public class FMatrixOpCpu implements FMatrixOp {
      * @param output the result of the inverse operation.
      */
     @Override
-    public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+    public void maxInverseRotation(imatrix valInput, imatrix rotInput,
+            int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output
+    ) {
         int spf = valInput.getNrOfSlices() / nrOfFeatures;
         float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
         for (int h = 0; h < valInput.getNrOfHyperSlices(); ++h) {
@@ -939,6 +1094,65 @@ public class FMatrixOpCpu implements FMatrixOp {
             System.arraycopy(arrSrc, 0, arrDst, 0, floatsToCopy);
         } else {
             copyInto(src, dst);
+        }
+    }
+
+    /**
+     * Copies the slices of matrix1 and matrix2 into the destination matrix. One
+     * slice of the destination matrix will be composed of the concatenation of
+     * a slice of the first matrix and a slice of the second matrix.
+     *
+     * @param matrix1 the first matrix.
+     * @param matrix2 the second matrix.
+     * @param dst the destination matrix.
+     */
+    @Override
+    public void zip(imatrix matrix1, imatrix matrix2, imatrix dst) {
+        int hSlices = Math.min(matrix1.getNrOfHyperSlices(), matrix2.getNrOfHyperSlices());
+
+        hSlices = Math.min(hSlices, dst.getNrOfHyperSlices());
+        for (int h = 0; h < hSlices; ++h) {
+            for (int s = 0; s < matrix1.getNrOfSlices(); ++s) {
+                for (int r = 0; r < matrix1.getNrOfRows(); ++r) {
+                    for (int c = 0; c < matrix1.getNrOfColumns(); ++c) {
+                        float v1 = matrix1.get(r, c, s, h);
+                        dst.set(r, c, s * 2, h, v1);
+
+                        float v2 = matrix2.get(r, c, s, h);
+                        dst.set(r, c, s * 2 + 1, h, v2);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The even
+     * slices will be copied into the first destination matrix, the uneven
+     * slices will be copied into the second destination matrix.
+     *
+     * @param src the source matrix.
+     * @param dest1 the first destination matrix.
+     * @param dest2 the second destination matrix.
+     */
+    @Override
+    public void unzip(imatrix src, imatrix dest1, imatrix dest2) {
+        int hSlices = Math.min(dest1.getNrOfHyperSlices(), dest2.getNrOfHyperSlices());
+        hSlices = Math.min(hSlices, src.getNrOfHyperSlices());
+        for (int h = 0; h < hSlices; ++h) {
+            for (int s = 0; s < src.getNrOfSlices(); ++s) {
+                for (int r = 0; r < src.getNrOfRows(); ++r) {
+                    for (int c = 0; c < src.getNrOfColumns(); ++c) {
+                        if (s % 2 == 0) {
+                            float v1 = src.get(r, c, s, h);
+                            dest1.set(r, c, s / 2, h, v1);
+                        } else {
+                            float v2 = src.get(r, c, s, h);
+                            dest2.set(r, c, s / 2, h, v2);
+                        }
+                    }
+                }
+            }
         }
     }
 

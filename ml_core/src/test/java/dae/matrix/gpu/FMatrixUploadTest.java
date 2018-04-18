@@ -45,14 +45,15 @@ public class FMatrixUploadTest {
         // padding of two with one slice
         fmatrix mSrc = new fmatrix(5, 5, 1, 2, 2);
         mSrc.randomize(-1, 1);
-        GPU.uploadRMatrix(mSrc);
+        GPU.upload(mSrc);
 
         fmatrix mCopy = new fmatrix(mSrc);
-        mSrc.reset();
+        mSrc.applyFunction(x->0);
+        
         System.out.println("Before download");
         System.out.println(mSrc);
 
-        GPU.downloadRMatrix(mSrc);
+        GPU.download(mSrc);
         System.out.println("src");
         System.out.println(mSrc);
         System.out.println("copy");
@@ -62,12 +63,12 @@ public class FMatrixUploadTest {
         // padding of two with two slices
         fmatrix mSrc2 = new fmatrix(5, 5, 2, 2, 2);
         mSrc2.randomize(-1, 1);
-        GPU.uploadRMatrix(mSrc2);
+        GPU.upload(mSrc2);
 
         fmatrix mCopy2 = new fmatrix(mSrc2);
-        mSrc2.reset();
+        mSrc2.applyFunction(x->0);
 
-        GPU.downloadRMatrix(mSrc2);
+        GPU.download(mSrc2);
         System.out.println("src");
         System.out.println(mSrc2);
         System.out.println("copy");
@@ -75,7 +76,7 @@ public class FMatrixUploadTest {
         assertMatrixEquals(mSrc2, mCopy2);
 
         fmatrix mCopy3 = new fmatrix(5, 5, 2, 2, 2);
-        GPU.enqueueReadMatrix(mCopy3, mSrc2.getDeviceBuffer().getRMem());
+        GPU.enqueueReadMatrix(mCopy3, mSrc2.getDeviceBuffer().getMem());
         System.out.println("Zero padded matrix");
         System.out.println(mCopy3);
         assertMatrixEquals(mCopy3, mSrc2);
@@ -83,23 +84,23 @@ public class FMatrixUploadTest {
         // RMatrix
         fmatrix simpleMatrix = new fmatrix(10, 7, 2, 3);
         simpleMatrix.randomize(-1, 1);
-        GPU.uploadRMatrix(simpleMatrix);
+        GPU.upload(simpleMatrix);
 
         fmatrix simpleMatrixCopy = new fmatrix(simpleMatrix);
-        simpleMatrix.reset();
+        simpleMatrix.applyFunction(x->0);
 
-        GPU.downloadRMatrix(simpleMatrix);
+        GPU.download(simpleMatrix);
         assertMatrixEquals(simpleMatrix, simpleMatrixCopy);
 
         // RWMatrix
         fmatrix rwMatrix = new fmatrix(10, 7, 3, 4);
         rwMatrix.randomize(-1, 1);
-        GPU.uploadRWMatrix(rwMatrix);
+        GPU.upload(rwMatrix);
 
         fmatrix rwMatrixCopy = new fmatrix(rwMatrix);
-        rwMatrix.reset();
+        rwMatrix.applyFunction(x->0);
 
-        GPU.downloadRWMatrix(rwMatrix);
+        GPU.download(rwMatrix);
         assertMatrixEquals(rwMatrixCopy, rwMatrix);
     }
 
@@ -108,7 +109,7 @@ public class FMatrixUploadTest {
         fmatrix src = new fmatrix(5, 8, 3, 7, 2);
         src.randomize(-2, 2);
 
-        cl_mem mem_src = GPU.uploadRMatrix(src);
+        cl_mem mem_src = GPU.upload(src);
 
         fmatrix dst = new fmatrix(9, 12, 3, 7);
         GPU.enqueueReadMatrix(dst, mem_src);
@@ -140,5 +141,12 @@ public class FMatrixUploadTest {
         
         GPU.downloadRWMatrix(mSrc2);
         assertMatrixEquals(mCopy2,mSrc2);
+    }
+    
+    @Test
+    public void testBigMatrix(){
+        fmatrix weights = new fmatrix(9608,100);
+        weights.randomize(-1,1);
+        GPU.upload(weights);
     }
 }

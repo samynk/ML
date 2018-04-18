@@ -103,7 +103,7 @@ public class OpenCLKernel {
 
     protected void applyKernel(cl_kernel kernel, imatrix O) {
         FloatDeviceBuffer db = O.getDeviceBuffer();
-        cl_mem memOutput = db.uploadRWMatrix();
+        cl_mem memOutput = db.upload();
         clSetKernelArg(kernel, 0, Sizeof.cl_mem, Pointer.to(memOutput));
         long workSize = db.getGlobalWorkSize()[0];
         long localSize = localWorkSize[0];
@@ -119,7 +119,7 @@ public class OpenCLKernel {
         }
         eLWS[0] = localSize;
         clEnqueueNDRangeKernel(commandQueue, kernel, 1, null, eGWS, eLWS, 0, null, null);
-        db.markRWMatrixAsMaster();
+        db.markGpuAsMaster();
     }
     
     protected void applyKernel(cl_kernel kernel, intmatrix O) {

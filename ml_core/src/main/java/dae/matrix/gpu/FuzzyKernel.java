@@ -51,10 +51,10 @@ public class FuzzyKernel extends OpenCLKernel {
 
     public void fuzzyFunction(imatrix input, int classes, imatrix a, imatrix b, imatrix output) {
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem inputMem = input.getDeviceBuffer().uploadRMatrix();
-        cl_mem aMem = a.getDeviceBuffer().uploadRMatrix();
-        cl_mem bMem = b.getDeviceBuffer().uploadRMatrix();
-        cl_mem outputMem = outputDB.getRWMem();
+        cl_mem inputMem = input.getDeviceBuffer().upload();
+        cl_mem aMem = a.getDeviceBuffer().upload();
+        cl_mem bMem = b.getDeviceBuffer().upload();
+        cl_mem outputMem = outputDB.getMem();
 
         int[] dim = new int[]{input.getNrOfRows(), classes-1, output.getHyperSliceSize()};
 
@@ -75,14 +75,14 @@ public class FuzzyKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
     public void fuzzyShiftMinus(imatrix input, int classes, imatrix output) {
         int[] dim = new int[]{classes, input.getHyperSliceSize(), output.getHyperSliceSize()};
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem inputMem = input.getDeviceBuffer().uploadRMatrix();
-        cl_mem outputMem = outputDB.getRWMem();
+        cl_mem inputMem = input.getDeviceBuffer().upload();
+        cl_mem outputMem = outputDB.getMem();
 
         clSetKernelArg(fuzzyShiftMinus, 0, Sizeof.cl_int4, Pointer.to(dim));
         clSetKernelArg(fuzzyShiftMinus, 1, Sizeof.cl_mem, Pointer.to(inputMem));
@@ -99,16 +99,16 @@ public class FuzzyKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
     public void fuzzyShiftDeltas(imatrix input, int classes, imatrix output) {
         int[] dim = new int[]{classes, input.getHyperSliceSize(), output.getHyperSliceSize(), input.getNrOfHyperSlices()};
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem inputMem = input.getDeviceBuffer().uploadRMatrix();
+        cl_mem inputMem = input.getDeviceBuffer().upload();
         // reset output matrix.
-        GPU.zeroFillRW(output);
-        cl_mem outputMem = outputDB.getRWMem();
+        GPU.zeroFill(output);
+        cl_mem outputMem = outputDB.getMem();
 
         clSetKernelArg(fuzzyShiftDeltas, 0, Sizeof.cl_int4, Pointer.to(dim));
         clSetKernelArg(fuzzyShiftDeltas, 1, Sizeof.cl_mem, Pointer.to(inputMem));
@@ -125,17 +125,17 @@ public class FuzzyKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
     
     public void fuzzyBackProp(imatrix input, imatrix weights, int classes, imatrix output) {
         int[] dim = new int[]{classes, input.getHyperSliceSize(), output.getHyperSliceSize()};
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem inputMem = input.getDeviceBuffer().uploadRMatrix();
-        cl_mem weightMem = weights.getDeviceBuffer().uploadRMatrix();
+        cl_mem inputMem = input.getDeviceBuffer().upload();
+        cl_mem weightMem = weights.getDeviceBuffer().upload();
         // reset output matrix.
-        GPU.zeroFillRW(output);
-        cl_mem outputMem = outputDB.getRWMem();
+        GPU.zeroFill(output);
+        cl_mem outputMem = outputDB.getMem();
 
         clSetKernelArg(fuzzyBackProp, 0, Sizeof.cl_int4, Pointer.to(dim));
         clSetKernelArg(fuzzyBackProp, 1, Sizeof.cl_mem, Pointer.to(inputMem));
@@ -153,17 +153,17 @@ public class FuzzyKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
     
     public void fuzzyInputAdd(imatrix input, imatrix weights, int classes, imatrix output) {
         int[] dim = new int[]{classes, input.getHyperSliceSize(), output.getHyperSliceSize()};
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem inputMem = input.getDeviceBuffer().uploadRMatrix();
-        cl_mem weightMem = weights.getDeviceBuffer().uploadRMatrix();
+        cl_mem inputMem = input.getDeviceBuffer().upload();
+        cl_mem weightMem = weights.getDeviceBuffer().upload();
         // reset output matrix.
-        GPU.zeroFillRW(output);
-        cl_mem outputMem = outputDB.getRWMem();
+        GPU.zeroFill(output);
+        cl_mem outputMem = outputDB.getMem();
 
         clSetKernelArg(fuzzyInputAdd, 0, Sizeof.cl_int4, Pointer.to(dim));
         clSetKernelArg(fuzzyInputAdd, 1, Sizeof.cl_mem, Pointer.to(inputMem));
@@ -181,6 +181,6 @@ public class FuzzyKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 }

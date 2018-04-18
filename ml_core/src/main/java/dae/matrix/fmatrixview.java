@@ -28,6 +28,8 @@ public class fmatrixview implements imatrix {
     private final int sliceSize;
     private final int hyperSliceSize;
 
+    private String name;
+
     public fmatrixview(int rows, int columns, int slices, imatrix source) {
         this.rows = rows;
         this.columns = columns;
@@ -41,8 +43,8 @@ public class fmatrixview implements imatrix {
         }
         this.source = source;
     }
-    
-    public imatrix getSource(){
+
+    public imatrix getSource() {
         return source;
     }
 
@@ -85,7 +87,21 @@ public class fmatrixview implements imatrix {
 
     @Override
     public String getName() {
-        return source.getName() + "_view";
+        if (name == null) {
+            return source.getName() + "_view";
+        } else {
+            return name;
+        }
+    }
+
+    /**
+     * Sets the name of the matrix object.
+     *
+     * @param name the name of the object.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name ;
     }
 
     @Override
@@ -229,7 +245,7 @@ public class fmatrixview implements imatrix {
 
     @Override
     public String getSizeAsString() {
-        return "[ " + getNrOfRows() + " , " + getNrOfColumns() + " , " + getNrOfSlices() +" , " +getNrOfHyperSlices() + " ]";
+        return "[ " + getNrOfRows() + " , " + getNrOfColumns() + " , " + getNrOfSlices() + " , " + getNrOfHyperSlices() + " ]";
     }
 
     @Override
@@ -266,9 +282,9 @@ public class fmatrixview implements imatrix {
     public void makeMaster() {
         source.makeMaster();
     }
-    
+
     @Override
-    public String toString(){
+    public String toString() {
         return source.toString();
     }
 }

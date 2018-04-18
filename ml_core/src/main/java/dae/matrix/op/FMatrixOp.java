@@ -102,6 +102,29 @@ public interface FMatrixOp {
     public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output);
 
     /**
+     * The input contains data per two slices. The even slices contain the value
+     * data, the oneven slices contain the rotation data. The max pooling is
+     * applied to the value data, with conservation of the rotation data.
+     *
+     * @param input the input matrix with value and rotation slices.
+     * @param output the scale output matrix with value and rotation slices.
+     * @param maskLayer the layer that contains the cells with the maximum
+     * value.
+     */
+    public void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer);
+
+    /**
+     * Transfers the maximum values into the output matrix at the correct cell
+     * location as indicated by the masklayer.
+     *
+     * @param input the input matrix, a downscaled version of the output matrix.
+     * @param maskLayer the mask layer that guides the transfer of values to the
+     * output matrix.
+     * @param output the output matrix.
+     */
+    public void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output);
+
+    /**
      * Calculates a fuzzification layer.
      *
      * @param input the inputs to fuzzify.
@@ -274,6 +297,28 @@ public interface FMatrixOp {
     public void copyIntoSlice(imatrix toCopy, imatrix dest);
 
     /**
+     * Copies the slices of matrix1 and matrix2 into the destination matrix. One
+     * slice of the destination matrix will be composed of the concatenation of
+     * a slice of the first matrix and a slice of the second matrix.
+     *
+     * @param matrix1 the first matrix.
+     * @param matrix2 the second matrix.
+     * @param dest the destination matrix.
+     */
+    public void zip(imatrix matrix1, imatrix matrix2, imatrix dest);
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The even
+     * slices will be copied into the first destination matrix, the uneven
+     * slices will be copied into the second destination matrix.
+     *
+     * @param src the source matrix.
+     * @param dest1 the first destination matrix.
+     * @param dest2 the second destination matrix.
+     */
+    public void unzip(imatrix src, imatrix dest1, imatrix dest2);
+
+    /**
      * Applies the activation function on the given matrix.
      *
      * @param function the function that defines the derived activation
@@ -337,17 +382,27 @@ public interface FMatrixOp {
     public imatrix adamAdaptWeights(imatrix weights, float eta, float beta1, float beta2, float epsilon, imatrix moment, imatrix velocity);
 
     /**
-     * Rotates a kernel. The first slice will be preserved and rotated copies
-     * will be generated in the subsequent slices. The start angle indicates the
-     * angle of the first slice.
+     * Rotates a kernel. The start angle indicates the angle of the first slice.
      *
      * @param filter the kernel to rotate.
-     * @param nrOfFeatures the number of features in the kernel.
      * @param nrOfRotations the number of rotations.
      * @param minAngle the start angle, first slice included.
      * @param maxAngle the end angle.
+     * @param output the output of the rotation.
      */
-    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle);
+    public void rotateKernels(imatrix filter, int nrOfRotations, float minAngle, float maxAngle, imatrix output);
+
+    /**
+     * Accumulates the output rotations into a kernel. The start angle indicates
+     * the angle of the first slice.
+     *
+     * @param rotatedOutput the kernel to rotate.
+     * @param nrOfRotations the number of rotations.
+     * @param minAngle the start angle, first slice included.
+     * @param maxAngle the end angle.
+     * @param kernelOutput the output of the rotation.
+     */
+    public void accumulateRotateKernels(imatrix rotatedOutput, int nrOfRotations, float minAngle, float maxAngle, imatrix kernelOutput);
 
     /**
      * Condenses the input to detect the max activation rotation. The maximum
@@ -362,10 +417,11 @@ public interface FMatrixOp {
      * @param rotOutput the matrix that stores the rotation values.
      */
     public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix valOutput, imatrix rotOutput);
-    
+
     /**
-     * Performs the inverse operation of the maxRotation and stores the given value according the the rotation stored in rotInput
-     * 
+     * Performs the inverse operation of the maxRotation and stores the given
+     * value according the the rotation stored in rotInput
+     *
      * @param valInput the activation values.
      * @param rotInput the rotation values.
      * @param nrOfFeatures the number of features in the convolution layer.
@@ -374,6 +430,6 @@ public interface FMatrixOp {
      * @param maxAngle the maxAngle of the rotations.
      * @param output the result of the inverse operation.
      */
-    public void maxInverseRotation(imatrix valInput,imatrix rotInput,  int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output);
+    public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output);
 
 }

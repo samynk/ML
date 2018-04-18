@@ -16,6 +16,12 @@ public interface imatrix {
      * @return the name of the matrix object.
      */
     public String getName();
+    
+    /**
+     * Sets the name of the matrix object.
+     * @param name the name of the matrix.
+     */
+    public void setName(String name);
 
     /**
      * Checks if this matrix is a row vector.
@@ -292,5 +298,7 @@ public interface imatrix {
      * Make the cpu buffer the most current.
      */
     public void makeMaster();
+
+    
 
 }

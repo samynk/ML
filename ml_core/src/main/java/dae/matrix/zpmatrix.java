@@ -22,6 +22,7 @@ public class zpmatrix implements imatrix {
     private final int zeroPadding;
 
     private final int[] padding = new int[2];
+    private String name;
 
     public zpmatrix(imatrix source, int zp) {
         this.source = source;
@@ -37,7 +38,21 @@ public class zpmatrix implements imatrix {
      */
     @Override
     public String getName() {
-        return "zp_" + source.getName();
+        if (name == null) {
+            return source.getName() + "_zp";
+        } else {
+            return name;
+        }
+    }
+
+    /**
+     * Sets the name of the matrix object.
+     *
+     * @param name the name of the object.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override

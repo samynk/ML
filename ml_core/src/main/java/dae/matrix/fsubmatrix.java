@@ -20,6 +20,8 @@ public class fsubmatrix implements imatrix {
     private final int columns;
     private final int slices;
     private final int hyperslices;
+    
+    private String name;
 
     /**
      * Creates a sub matrix which uses another matrix as backing source.
@@ -82,7 +84,21 @@ public class fsubmatrix implements imatrix {
      */
     @Override
     public String getName() {
-        return source.getName();
+        if (name == null) {
+            return source.getName() + "_submatrix";
+        } else {
+            return name;
+        }
+    }
+
+    /**
+     * Sets the name of the matrix object.
+     *
+     * @param name the name of the object.
+     */
+    @Override
+    public void setName(String name) {
+        this.name = name;
     }
 
     /**

@@ -6,7 +6,9 @@ package dae.matrix.gpu;
 
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
+import static org.jocl.CL.CL_KERNEL_NUM_ARGS;
 import static org.jocl.CL.clEnqueueNDRangeKernel;
+import static org.jocl.CL.clGetKernelInfo;
 import static org.jocl.CL.clSetKernelArg;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
@@ -26,6 +28,7 @@ public class ConvolvKernel extends OpenCLKernel {
     private cl_kernel batchCorrelation;
     private cl_kernel batchBackpropCorrelation;
     private cl_kernel rotateKernel;
+    private cl_kernel accumulateRotateKernel;
     private cl_kernel maxRotation;
     private cl_kernel inverseMaxRotation;
 
@@ -54,6 +57,7 @@ public class ConvolvKernel extends OpenCLKernel {
         batchCorrelation = this.createKernel("batchCorrelate");
         batchBackpropCorrelation = this.createKernel("batchBackpropCorrelate");
         rotateKernel = this.createKernel("rotateKernels");
+        accumulateRotateKernel = this.createKernel("accumulateRotateKernels");
         maxRotation = this.createKernel("maxRotation");
         inverseMaxRotation = this.createKernel("inverseMaxRotation");
         super.releaseProgram();
@@ -61,13 +65,13 @@ public class ConvolvKernel extends OpenCLKernel {
 
     public void convolv(imatrix input, imatrix filter, imatrix output) {
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
-        cl_mem memInput = inputDB.uploadRMatrix();
+        cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
-        cl_mem memFilter = filterDB.uploadRMatrix();
+        cl_mem memFilter = filterDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem memOutput = outputDB.getRWMem();
+        cl_mem memOutput = outputDB.getMem();
 
         clSetKernelArg(convolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(convolution, 1, Sizeof.cl_mem, Pointer.to(memFilter));
@@ -86,7 +90,7 @@ public class ConvolvKernel extends OpenCLKernel {
                 0,
                 null,
                 null);
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
     public void batchConvolv(imatrix input, imatrix filter, int stride, imatrix output) {
@@ -95,15 +99,15 @@ public class ConvolvKernel extends OpenCLKernel {
         int[] ps = new int[]{stride};
         int[] fps = new int[]{filter.getNrOfSlices() / input.getNrOfSlices()};
 
-        cl_mem memInput = inputDB.uploadRMatrix();
+        cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
-        cl_mem memFilter = filterDB.uploadRMatrix();
+        cl_mem memFilter = filterDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
 
-        cl_mem memOutput = outputDB.getRWMem();
-        GPU.zeroFillRW(output);
+        cl_mem memOutput = outputDB.getMem();
+        GPU.zeroFill(output);
 
         clSetKernelArg(batchConvolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(batchConvolution, 1, Sizeof.cl_mem, Pointer.to(memFilter));
@@ -125,7 +129,7 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
     public void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
@@ -136,15 +140,15 @@ public class ConvolvKernel extends OpenCLKernel {
 
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         if (input.getZeroPadding() > 0) {
-            GPU.zeroFillR(input);
+            GPU.zeroFill(input);
         }
-        cl_mem memInput = inputDB.uploadRMatrix();
+        cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
-        cl_mem memFilter = filterDB.uploadRMatrix();
+        cl_mem memFilter = filterDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem memOutput = outputDB.getRWMem();
+        cl_mem memOutput = outputDB.getMem();
 
         clSetKernelArg(batchCorrelation, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(batchCorrelation, 1, Sizeof.cl_mem, Pointer.to(memFilter));
@@ -166,7 +170,7 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
     public void batchBackpropCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
@@ -176,15 +180,16 @@ public class ConvolvKernel extends OpenCLKernel {
 
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         if (input.getZeroPadding() > 0) {
-            GPU.zeroFillR(input);
+            GPU.zeroFill(input);
         }
-        cl_mem memInput = inputDB.uploadRMatrix();
+        inputDB.markCpuAsMaster();
+        cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
-        cl_mem memFilter = filterDB.uploadRMatrix();
+        cl_mem memFilter = filterDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem memOutput = outputDB.getRWMem();
+        cl_mem memOutput = outputDB.getMem();
 
         clSetKernelArg(batchBackpropCorrelation, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(batchBackpropCorrelation, 1, Sizeof.cl_mem, Pointer.to(memFilter));
@@ -206,37 +211,41 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
 
-    public void rotateKernels(imatrix filter, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle) {
-        // slices per feature
-        int sPRF = filter.getNrOfSlices() / nrOfFeatures;
-        // slices per rotation.
-        int sPRR = sPRF / nrOfRotations;
+    fmatrix sincos;
 
-        int[] fDim = new int[]{filter.getNrOfRows(), filter.getNrOfColumns(), sPRF, sPRR};
-        int slices = filter.getNrOfSlices();
-        fmatrix sincos = new fmatrix(2, slices);
-        float angleStep = (maxAngle - minAngle) / (slices - 1);
+    public void rotateKernels(imatrix filter, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
+
+        int[] fDim = new int[]{filter.getNrOfRows(), filter.getNrOfColumns(), nrOfRotations};
+        if (sincos == null || sincos.getNrOfColumns() < nrOfRotations) {
+            sincos = new fmatrix(2, nrOfRotations);
+        }
+
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
         float angle = minAngle;
-        for (int i = 0; i < slices; ++i) {
+        for (int i = 0; i < nrOfRotations; ++i) {
             float s = (float) Math.sin(angle);
             float c = (float) Math.cos(angle);
             sincos.set(0, i, s);
             sincos.set(1, i, c);
             angle += angleStep;
         }
+        sincos.makeMaster();
 
         FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
-        cl_mem memFilter = filterDB.uploadRWMatrix();
+        cl_mem memFilter = filterDB.upload();
 
         FloatDeviceBuffer sincosDB = sincos.getDeviceBuffer();
-        cl_mem memSincos = sincosDB.uploadRMatrix();
+        cl_mem memSincos = sincosDB.upload();
+
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
 
         clSetKernelArg(rotateKernel, 0, Sizeof.cl_mem, Pointer.to(memFilter));
         clSetKernelArg(rotateKernel, 1, Sizeof.cl_int4, Pointer.to(fDim));
         clSetKernelArg(rotateKernel, 2, Sizeof.cl_mem, Pointer.to(memSincos));
+        clSetKernelArg(rotateKernel, 3, Sizeof.cl_mem, Pointer.to(outputDB.getMem()));
 
         // first dimension is (x,y) of kernel to rotate
         // second dimension is slice of filter.
@@ -245,40 +254,89 @@ public class ConvolvKernel extends OpenCLKernel {
                 rotateKernel,
                 1,
                 null,
-                filterDB.getGlobalWorkSize(),
+                outputDB.getGlobalWorkSize(),
                 this.localWorkSize,
                 0,
                 null,
                 null);
 
-        filterDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
+    }
+
+    public void accumulateRotateKernels(imatrix rotatedOutput, int nrOfRotations, float minAngle, float maxAngle, imatrix kernelOutput) {
+        int[] fDim = new int[]{kernelOutput.getNrOfRows(), kernelOutput.getNrOfColumns(), nrOfRotations};
+        if (sincos == null || sincos.getNrOfColumns() < nrOfRotations) {
+            sincos = new fmatrix(2, nrOfRotations);
+        }
+        float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
+        float angle = minAngle;
+        for (int i = 0; i < nrOfRotations; ++i) {
+            float s = (float) Math.sin(-angle);
+            float c = (float) Math.cos(-angle);
+            sincos.set(0, i, s);
+            sincos.set(1, i, c);
+            angle += angleStep;
+        }
+        sincos.makeMaster();
+
+        FloatDeviceBuffer rotatedDB = rotatedOutput.getDeviceBuffer();
+        cl_mem memRotated = rotatedDB.upload();
+
+        FloatDeviceBuffer sincosDB = sincos.getDeviceBuffer();
+        cl_mem memSincos = sincosDB.upload();
+
+        GPU.zeroFill(kernelOutput);
+        FloatDeviceBuffer outputDB = kernelOutput.getDeviceBuffer();
+        cl_mem memOutput = outputDB.getMem();
+
+        long[] result = new long[1];
+        clGetKernelInfo(accumulateRotateKernel, CL_KERNEL_NUM_ARGS, Sizeof.cl_int, Pointer.to(result), null);
+
+        clSetKernelArg(accumulateRotateKernel, 0, Sizeof.cl_mem, Pointer.to(memRotated));
+        clSetKernelArg(accumulateRotateKernel, 1, Sizeof.cl_int4, Pointer.to(fDim));
+        clSetKernelArg(accumulateRotateKernel, 2, Sizeof.cl_mem, Pointer.to(memSincos));
+        clSetKernelArg(accumulateRotateKernel, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+
+        // first dimension is (x,y) of kernel to rotate
+        // second dimension is slice of filter.
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                accumulateRotateKernel,
+                1,
+                null,
+                outputDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        outputDB.markGpuAsMaster();
     }
 
     public void maxRotation(imatrix input, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix valOutput, imatrix rotOutput) {
         // slices per feature
         int sPRF = valOutput.getNrOfSlices() / nrOfFeatures;
-        int[] desc = new int[]{sPRF, nrOfRotations};
+        int[] desc = new int[]{sPRF, nrOfRotations, input.getSize()};
 
         float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
 
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
-        cl_mem memInput = inputDB.uploadRMatrix();
+        cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer outputDB = valOutput.getDeviceBuffer();
-        cl_mem memOutput = outputDB.getRWMem();
+        cl_mem memOutput = outputDB.getMem();
 
         FloatDeviceBuffer rotOutputDB = rotOutput.getDeviceBuffer();
-        cl_mem memRotOutput = rotOutputDB.getRWMem();
+        cl_mem memRotOutput = rotOutputDB.getMem();
 
         clSetKernelArg(maxRotation, 0, Sizeof.cl_mem, Pointer.to(memInput));
         clSetKernelArg(maxRotation, 1, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(maxRotation, 2, Sizeof.cl_mem, Pointer.to(memRotOutput));
         clSetKernelArg(maxRotation, 3, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
         clSetKernelArg(maxRotation, 4, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
-        clSetKernelArg(maxRotation, 5, Sizeof.cl_int2, Pointer.to(desc));
+        clSetKernelArg(maxRotation, 5, Sizeof.cl_int4, Pointer.to(desc));
         clSetKernelArg(maxRotation, 6, Sizeof.cl_float, Pointer.to(new float[]{angleStep}));
 
-       
         // first dimension is (x,y) of kernel to rotate
         // second dimension is slice of filter.
         clEnqueueNDRangeKernel(
@@ -292,35 +350,34 @@ public class ConvolvKernel extends OpenCLKernel {
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
-        rotOutputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
+        rotOutputDB.markGpuAsMaster();
     }
-    
-    public void maxInverseRotation(imatrix valInput,imatrix rotInput,  int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output){
+
+    public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
         // slices per feature
         int sPRF = valInput.getNrOfSlices() / nrOfFeatures;
-        int[] desc = new int[]{sPRF, nrOfRotations};
+        int[] desc = new int[]{sPRF, nrOfRotations, output.getSize()};
 
         float angleStep = (maxAngle - minAngle) / (nrOfRotations - 1);
 
         FloatDeviceBuffer valInputDB = valInput.getDeviceBuffer();
-        cl_mem memValInput = valInputDB.uploadRMatrix();
+        cl_mem memValInput = valInputDB.upload();
 
         FloatDeviceBuffer rotInputDB = rotInput.getDeviceBuffer();
-        cl_mem memRotInput = rotInputDB.uploadRMatrix();
+        cl_mem memRotInput = rotInputDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
-        cl_mem memOutput = outputDB.getRWMem();
+        cl_mem memOutput = outputDB.getMem();
 
         clSetKernelArg(inverseMaxRotation, 0, Sizeof.cl_mem, Pointer.to(memValInput));
         clSetKernelArg(inverseMaxRotation, 1, Sizeof.cl_mem, Pointer.to(memRotInput));
         clSetKernelArg(inverseMaxRotation, 2, Sizeof.cl_mem, Pointer.to(memOutput));
         clSetKernelArg(inverseMaxRotation, 3, Sizeof.cl_int4, Pointer.to(valInputDB.getDimensionSizes()));
         clSetKernelArg(inverseMaxRotation, 4, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
-        clSetKernelArg(inverseMaxRotation, 5, Sizeof.cl_int2, Pointer.to(desc));
+        clSetKernelArg(inverseMaxRotation, 5, Sizeof.cl_int4, Pointer.to(desc));
         clSetKernelArg(inverseMaxRotation, 6, Sizeof.cl_float, Pointer.to(new float[]{angleStep}));
 
-       
         // first dimension is (x,y) of kernel to rotate
         // second dimension is slice of filter.
         clEnqueueNDRangeKernel(
@@ -328,12 +385,13 @@ public class ConvolvKernel extends OpenCLKernel {
                 inverseMaxRotation,
                 1,
                 null,
-                outputDB.getGlobalWorkSize(),
+                valInputDB.getGlobalWorkSize(),
                 this.localWorkSize,
                 0,
                 null,
                 null);
 
-        outputDB.markRWMatrixAsMaster();
+        outputDB.markGpuAsMaster();
     }
+
 }

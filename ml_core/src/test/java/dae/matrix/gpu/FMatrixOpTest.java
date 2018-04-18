@@ -395,13 +395,18 @@ public class FMatrixOpTest {
 
     @Test
     public void testMaxPool() {
-        fmatrix input = new fmatrix(6, 6, 2, 10);
-        input.randomize(-3, 3);
-        intmatrix maskLayer1 = new intmatrix(3, 3, 2, 10);
-        intmatrix maskLayer2 = new intmatrix(3, 3, 2, 10);
+        int rows = 20;
+        int columns = 20;
+        int slices = 10;
+        int batchSize = 50;
 
-        fmatrix output1 = new fmatrix(3, 3, 2, 10);
-        fmatrix output2 = new fmatrix(3, 3, 2, 10);
+        fmatrix input = new fmatrix(rows, columns, slices, batchSize);
+        input.randomize(-3, 3);
+        intmatrix maskLayer1 = new intmatrix(rows / 2, columns / 2, slices, batchSize);
+        intmatrix maskLayer2 = new intmatrix(rows / 2, columns / 2, slices, batchSize);
+
+        fmatrix output1 = new fmatrix(rows / 2, columns / 2, slices, batchSize);
+        fmatrix output2 = new fmatrix(rows / 2, columns / 2, slices, batchSize);
 
         cpu.batchMaxPool(input, output1, maskLayer1);
         gpu.batchMaxPool(input, output2, maskLayer2);
@@ -411,8 +416,8 @@ public class FMatrixOpTest {
         assertMatrixEquals(output1, output2);
         assertMatrixEquals(maskLayer1, maskLayer2);
 
-        fmatrix backprop1 = new fmatrix(6, 6, 2, 10);
-        fmatrix backprop2 = new fmatrix(6, 6, 2, 10);
+        fmatrix backprop1 = new fmatrix(rows, columns, slices, batchSize);
+        fmatrix backprop2 = new fmatrix(rows, columns, slices, batchSize);
 
         cpu.batchBackpropMaxPool(output1, maskLayer1, 2, 2, backprop1);
         gpu.batchBackpropMaxPool(output1, maskLayer2, 2, 2, backprop2);
@@ -543,8 +548,8 @@ public class FMatrixOpTest {
         input1.randomize(-5, 5);
         fmatrix inputCopy = new fmatrix(100, 107, 5, 2);
 
-        GPU.zeroFillR(input1);
-        GPU.downloadRMatrix(input1);
+        GPU.zeroFill(input1);
+        GPU.download(input1);
         assertMatrixEquals(input1, inputCopy);
     }
 
@@ -620,8 +625,8 @@ public class FMatrixOpTest {
 
     @Test
     public void testRotateKernel() {
-        fmatrix filterCpu = new fmatrix(49, 49, 28);
-        // set pattern in in first slice.
+        fmatrix kernel = new fmatrix(49, 49, 4);
+        // set pattern
         for (int x = 0; x < 49; ++x) {
             for (int y = 0; y < 49; ++y) {
                 float val = (y / 7 + x / 7) % 2 == 0 ? 1 : 0;
@@ -639,51 +644,150 @@ public class FMatrixOpTest {
                             break;
                     }
 
-                    filterCpu.set(y, x, fs * 7, val);
+                    kernel.set(y, x, fs, val);
                 }
             }
         }
-        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("startRotation"));
-        fmatrix filterGpu = new fmatrix(filterCpu);
+        fmatrix.writeAs3DImage(kernel, 4, 10, Paths.get("startRotation"));
 
-        gpu.rotateKernels(filterGpu, 1, 7, 0, (float) Math.PI);
-        filterGpu.sync();
-        cpu.rotateKernels(filterCpu, 4, 7, 0, (float) (Math.PI - Math.PI / 8.0));
+        fmatrix outputGpu = new fmatrix(49, 49, 28);
+        fmatrix outputCpu = new fmatrix(49, 49, 28);
+        gpu.rotateKernels(kernel, 7, 0, (float) (Math.PI - Math.PI / 8.0), outputGpu);
+        cpu.rotateKernels(kernel, 7, 0, (float) (Math.PI - Math.PI / 8.0), outputCpu);
 
-        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("rotationCpu"));
-        fmatrix.writeAs3DImage(filterCpu, 7, 10, Paths.get("rotationGpu"));
+        outputGpu.sync();
+        fmatrix.writeAs3DImage(outputCpu, 7, 10, Paths.get("rotationCpu"));
+        fmatrix.writeAs3DImage(outputGpu, 7, 10, Paths.get("rotationGpu"));
+
+        assertMatrixEquals(outputCpu, outputGpu);
+
+    }
+
+    @Test
+    public void testAccumulateRotateKernel() {
+
+        fmatrix kernel = new fmatrix(49, 49, 28);
+        kernel.randomize(-1, 1);
+        fmatrix.writeAs3DImage(kernel, 4, 10, Paths.get("startRotation"));
+
+        fmatrix outputGpu = new fmatrix(49, 49, 4);
+        fmatrix outputCpu = new fmatrix(49, 49, 4);
+        gpu.accumulateRotateKernels(kernel, 7, 0, (float) (Math.PI - Math.PI / 8.0), outputGpu);
+        cpu.accumulateRotateKernels(kernel, 7, 0, (float) (Math.PI - Math.PI / 8.0), outputCpu);
+
+        outputGpu.sync();
+        fmatrix.writeAs3DImage(outputCpu, 7, 10, Paths.get("rotationCpu"));
+        fmatrix.writeAs3DImage(outputGpu, 7, 10, Paths.get("rotationGpu"));
+
+        assertMatrixEquals(outputCpu, outputGpu);
 
     }
 
     @Test
     public void maxRotation() {
-        fmatrix input = new fmatrix(5, 5, 4 * 8, 2);
+        int rows = 28;
+        int columns = 28;
+        int features = 6;
+        int rotations = 7;
+        int batchSize = 100;
+
+        fmatrix input = new fmatrix(rows, columns, features * rotations, batchSize);
         input.randomize(-1, 1);
 
-        fmatrix outputCpu = new fmatrix(5, 5, 4, 2);
-        fmatrix rotOutputCpu = new fmatrix(5, 5, 4, 2);
-        fmatrix outputGpu = new fmatrix(5, 5, 4, 2);
-        fmatrix rotOutputGpu = new fmatrix(5, 5, 4, 2);
+        fmatrix outputCpu = new fmatrix(rows, columns, features, batchSize);
+        fmatrix rotOutputCpu = new fmatrix(rows, columns, features, batchSize);
+        fmatrix outputGpu = new fmatrix(rows, columns, features, batchSize);
+        fmatrix rotOutputGpu = new fmatrix(rows, columns, features, batchSize);
 
-        gpu.maxRotation(input, 4, 8, 0, (float) Math.PI, outputGpu, rotOutputGpu);
+        gpu.maxRotation(input, features, rotations, 0, (float) Math.PI, outputGpu, rotOutputGpu);
         outputGpu.sync();
         rotOutputGpu.sync();
-        cpu.maxRotation(input, 4, 8, 0, (float) Math.PI, outputCpu, rotOutputCpu);
+        cpu.maxRotation(input, features, rotations, 0, (float) Math.PI, outputCpu, rotOutputCpu);
 
         assertMatrixEquals(outputCpu, outputGpu);
         assertMatrixEquals(rotOutputCpu, rotOutputGpu);
 
-        fmatrix output2Cpu = new fmatrix(5, 5, 32, 2);
-        fmatrix output2Gpu = new fmatrix(5, 5, 32, 2);
-        gpu.maxInverseRotation(outputGpu, rotOutputGpu, 4, 8, 0, (float) Math.PI, output2Gpu);
-        cpu.maxInverseRotation(outputCpu, rotOutputCpu, 4, 8, 0, (float) Math.PI, output2Cpu);
+        fmatrix output2Cpu = new fmatrix(rows, columns, features * rotations, batchSize);
+        fmatrix output2Gpu = new fmatrix(rows, columns, features * rotations, batchSize);
+        gpu.maxInverseRotation(outputGpu, rotOutputGpu, features, rotations, 0, (float) Math.PI, output2Gpu);
+        cpu.maxInverseRotation(outputCpu, rotOutputCpu, features, rotations, 0, (float) Math.PI, output2Cpu);
         output2Gpu.sync();
-        
+
         System.out.println("Cpu");
-        System.out.println(output2Cpu);
+        //System.out.println(output2Cpu);
         System.out.println("Gpu");
-        System.out.println(output2Gpu);
+        //System.out.println(output2Gpu);
+
+        assertMatrixEquals(output2Cpu, output2Gpu);
+    }
+
+    @Test
+    public void testZip() {
+        fmatrix input1 = new fmatrix(7, 7, 4, 100);
+        input1.randomize(-1, 1);
+
+        fmatrix input2 = new fmatrix(7, 7, 4, 100);
+        input2.randomize(-1, 1);
+
+        fmatrix gpuDest = new fmatrix(7, 7, 8, 100);
+        fmatrix cpuDest = new fmatrix(7, 7, 8, 100);
+        gpu.zip(input1, input2, gpuDest);
+        cpu.zip(input1, input2, cpuDest);
+
+        gpuDest.sync();
+
+        assertMatrixEquals(gpuDest, cpuDest);
+
+        fmatrix cpuInput1 = new fmatrix(7, 7, 4, 100);
+        fmatrix cpuInput2 = new fmatrix(7, 7, 4, 100);
+        cpu.unzip(cpuDest, cpuInput1, cpuInput2);
+
+        fmatrix gpuInput1 = new fmatrix(7, 7, 4, 100);
+        fmatrix gpuInput2 = new fmatrix(7, 7, 4, 100);
+        gpu.unzip(gpuDest, gpuInput1, gpuInput2);
+
+        assertMatrixEquals(input1, cpuInput1);
+        assertMatrixEquals(input2, cpuInput2);
+
+        gpuInput1.sync();
+        gpuInput2.sync();
+        assertMatrixEquals(input1, gpuInput1);
+        assertMatrixEquals(input2, gpuInput2);
+
+    }
+
+    @Test
+    public void testMaxRotationPool() {
+        int rows = 20;
+        int columns = 20;
+        int slices = 8;
+        int batchSize = 50;
+
+        fmatrix src = new fmatrix(rows, columns, slices, batchSize);
+        src.randomize(-1, 1);
+
+        fmatrix gpuDest = new fmatrix(rows / 2, columns / 2, slices, batchSize);
+        intmatrix gpuMask = new intmatrix(rows / 2, columns / 2, slices / 2, batchSize);
+
+        fmatrix cpuDest = new fmatrix(rows / 2, columns / 2, slices, batchSize);
+        intmatrix cpuMask = new intmatrix(rows / 2, columns / 2, slices / 2, batchSize);
+
+        gpu.maxRotationPool(src, gpuDest, gpuMask);
+        cpu.maxRotationPool(src, cpuDest, cpuMask);
+
+        gpuDest.sync();
+        gpuMask.sync();
+
+        assertMatrixEquals(cpuMask, gpuMask);
+        assertMatrixEquals(cpuDest, gpuDest);
+
+        fmatrix gpuBP = new fmatrix(rows, columns, slices, batchSize);
+        fmatrix cpuBP = new fmatrix(rows, columns, slices, batchSize);
+
+        gpu.backpropMaxRotationPool(gpuDest, gpuMask, gpuBP);
+        cpu.backpropMaxRotationPool(cpuDest, cpuMask, cpuBP);
         
-         assertMatrixEquals(output2Cpu, output2Gpu);
+        gpuBP.sync();
+        assertMatrixEquals(cpuBP,gpuBP);
     }
 }

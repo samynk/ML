@@ -171,22 +171,17 @@ public class GPU {
         return values;
     }
 
-    public static final void zeroFillR(imatrix m) {
+    public static final void zeroFill(imatrix m) {
         FloatDeviceBuffer mDB = m.getDeviceBuffer();
-        zeroFill(mDB.getRMem(), mDB.getDeviceSize());
+        zeroFill(mDB.getMem(), mDB.getDeviceSize());
     }
 
     public static void fillR(imatrix O, float f) {
         float[] pattern = new float[]{f};
         FloatDeviceBuffer db = O.getDeviceBuffer();
 
-        clEnqueueFillBuffer(CL_COMMAND_QUEUE, O.getDeviceBuffer().getRMem(),
+        clEnqueueFillBuffer(CL_COMMAND_QUEUE, O.getDeviceBuffer().getMem(),
                 Pointer.to(pattern), Sizeof.cl_float, 0, db.getDeviceSize(), 0, null, null);
-    }
-
-    public static final void zeroFillRW(imatrix m) {
-        FloatDeviceBuffer mDB = m.getDeviceBuffer();
-        zeroFill(mDB.getRWMem(), mDB.getDeviceSize());
     }
 
     private static void zeroFill(cl_mem buffer, int size) {
@@ -201,23 +196,9 @@ public class GPU {
      * @param m the matrix to upload into the device.
      * @return the buffer object that is associated with the device buffer.
      */
-    public static final cl_mem uploadRMatrix(imatrix m) {
-        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read only matrix {0} to gpu.", m.getName());
-        cl_mem buffer = m.getDeviceBuffer().getRMem();
-        enqueueWriteMatrix(m, buffer);
-        return buffer;
-    }
-
-    /**
-     * Writes to a buffer object on the device that is defined as a read/write
-     * buffer on the device.
-     *
-     * @param m the matrix to upload into the device.
-     * @return the buffer object that is associated with the device buffer.
-     */
-    public static final cl_mem uploadRWMatrix(imatrix m) {
-        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading read write matrix {0} to gpu.", m.getName());
-        cl_mem buffer = m.getDeviceBuffer().getRWMem();
+    public static final cl_mem upload(imatrix m) {
+        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Uploading matrix {0} to gpu.", m.getName());
+        cl_mem buffer = m.getDeviceBuffer().getMem();
         enqueueWriteMatrix(m, buffer);
         return buffer;
     }
@@ -264,8 +245,8 @@ public class GPU {
                 mdb.getDeviceOffset(),
                 mdb.getHostOffset(),
                 mdb.getHostRegion(),
-                mdb.getDeviceRowPitch(), mdb.getDeviceSlicePitch(),
-                mdb.getHostRowPitch(), mdb.getHostSlicePitch(),
+                mdb.getDeviceRowPitch(),mdb.getDeviceSlicePitch(),
+                mdb.getHostRowPitch(),mdb.getHostSlicePitch(),
                 mdb.getCLPointer(),
                 0,
                 null,
@@ -300,21 +281,9 @@ public class GPU {
      *
      * @param m the padded matrix to download from the device
      */
-    public static final void downloadRMatrix(imatrix m) {
+    public static final void download(imatrix m) {
         Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Downloading read only matrix {0} from gpu.", m.getName());
-        cl_mem memOutput = m.getDeviceBuffer().getRMem();
-        enqueueReadMatrix(m, memOutput);
-    }
-
-    /**
-     * Downloads a padded matrix that was used as a read write buffer into the
-     * matrix m.
-     *
-     * @param m the padded matrix to download from the device
-     */
-    public static final void downloadRWMatrix(imatrix m) {
-        Logger.getLogger(GPU.class.getName()).log(Level.INFO, "Downloading read write matrix {0} from gpu.", m.getName());
-        cl_mem memOutput = m.getDeviceBuffer().getRWMem();
+        cl_mem memOutput = m.getDeviceBuffer().getMem();
         enqueueReadMatrix(m, memOutput);
     }
 
@@ -380,20 +349,11 @@ public class GPU {
                 null);
     }
 
-    static void copyRWBuffer(imatrix cpuBuffer) {
+    static void copyBuffer(imatrix cpuBuffer) {
         FloatDeviceBuffer db = cpuBuffer.getDeviceBuffer();
         clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
-                db.getRWMem(),
-                db.getRMem(),
-                0, 0,
-                db.getDeviceSize(), 0, null, null);
-    }
-
-    static void copyRBuffer(imatrix cpuBuffer) {
-        FloatDeviceBuffer db = cpuBuffer.getDeviceBuffer();
-        clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
-                db.getRMem(),
-                db.getRWMem(),
+                db.getMem(),
+                db.getMem(),
                 0, 0,
                 db.getDeviceSize(), 0, null, null);
     }
@@ -432,8 +392,8 @@ public class GPU {
         int dstSlices = dst.getNrOfSlices() * dst.getNrOfHyperSlices();
         int numSlices = Math.min(srcSlices, dstSlices);
 
-        dbSrc.uploadRMatrix();
-        dbDst.uploadRMatrix();
+        dbSrc.upload();
+        dbDst.upload();
 
         long region[] = new long[]{numRows * Float.BYTES, numCols, numSlices};
 
@@ -442,8 +402,8 @@ public class GPU {
                 || srcSlices != dstSlices
                 || src.getZeroPadding() != dst.getZeroPadding()) {
             clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
-                    dbSrc.getRMem(),
-                    dbDst.getRMem(),
+                    dbSrc.getMem(),
+                    dbDst.getMem(),
                     dbSrc.getDeviceOffset(),
                     dbDst.getDeviceOffset(),
                     region,
@@ -452,13 +412,13 @@ public class GPU {
                     0, null, null);
         } else {
             clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
-                    dbSrc.getRMem(),
-                    dbDst.getRMem(),
+                    dbSrc.getMem(),
+                    dbDst.getMem(),
                     0, 0,
                     dbSrc.getDeviceSize(), 0, null, null
             );
         }
-        dbDst.markRMatrixAsMaster();
+        dbDst.markGpuAsMaster();
     }
 
     public static void enqueueCopySliceMatrix(imatrix src, imatrix dst) {
@@ -466,13 +426,13 @@ public class GPU {
         FloatDeviceBuffer dbDst = dst.getDeviceBuffer();
 
         if (src.getHyperSliceSize() == dst.getHyperSliceSize()) {
-            dbSrc.uploadRMatrix();
+            dbSrc.upload();
             int deviceSize = Math.min(dbSrc.getDeviceSize(), dbDst.getDeviceSize());
 
             if (dst.getZeroPadding() == 0) {
                 clEnqueueCopyBuffer(CL_COMMAND_QUEUE,
-                        dbSrc.getRMem(),
-                        dbDst.getRMem(),
+                        dbSrc.getMem(),
+                        dbDst.getMem(),
                         0, 0,
                         deviceSize, 0, null, null
                 );
@@ -483,8 +443,8 @@ public class GPU {
                 long region[] = new long[]{numRows * Sizeof.cl_float, numCols, numSlices};
 
                 clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
-                        dbSrc.getRMem(),
-                        dbDst.getRMem(),
+                        dbSrc.getMem(),
+                        dbDst.getMem(),
                         dbSrc.getDeviceOffset(),
                         dbDst.getDeviceOffset(),
                         region,
@@ -492,26 +452,139 @@ public class GPU {
                         dbDst.getDeviceRowPitch(), dbDst.getDeviceSlicePitch(),
                         0, null, null);
             }
-            dbDst.markRMatrixAsMaster();
+            dbDst.markGpuAsMaster();
         } else if (src.getHyperSliceSize() < dst.getHyperSliceSize()) {
-            dbSrc.uploadRMatrix();
+            dbSrc.upload();
             int numSlicesDst = dst.getNrOfHyperSlices();
             int numSlicesSrc = src.getNrOfHyperSlices();
             int numSlices = Math.min(numSlicesDst, numSlicesSrc);
             int hSlicePitch = src.getHyperSliceSize() * Sizeof.cl_float;
             long region[] = new long[]{hSlicePitch, numSlices, 1};
             clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
-                    dbSrc.getRMem(),
-                    dbDst.getRMem(),
+                    dbSrc.getMem(),
+                    dbDst.getMem(),
                     dbSrc.getDeviceOffset(),
                     dbDst.getDeviceOffset(),
                     region,
                     hSlicePitch, 0,
                     dbDst.getDeviceSlicePitch() * dst.getNrOfSlices(), 0,
                     0, null, null);
+            dbDst.markGpuAsMaster();
         } else {
             enqueueCopyMatrix(src, dst);
         }
+    }
+
+    public static void zip(imatrix matrix1, imatrix matrix2, imatrix dest) {
+        FloatDeviceBuffer dbSrc1 = matrix1.getDeviceBuffer();
+        FloatDeviceBuffer dbSrc2 = matrix2.getDeviceBuffer();
+        FloatDeviceBuffer dbDst = dest.getDeviceBuffer();
+
+        // copy dbSrc1 with interleave of size of dbSrc2 and offset 0.
+        dbSrc1.upload();
+        dbSrc2.upload();
+        // determin number of hyper slices to copy.
+        int numSlicesDst = dest.getNrOfHyperSlices();
+        int numSlicesSrc1 = matrix1.getNrOfHyperSlices();
+        int numSlicesSrc2 = matrix2.getNrOfHyperSlices();
+        int numHSlices = Math.min(Math.min(numSlicesDst, numSlicesSrc1), numSlicesSrc2);
+
+        int slicePitch1 = matrix1.getSliceSize() * Sizeof.cl_float;
+        int slicePitch2 = matrix2.getSliceSize() * Sizeof.cl_float;
+
+        // copy first matrix
+        long region[] = new long[]{slicePitch1, numHSlices * matrix1.getNrOfSlices(), 1};
+        clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                dbSrc1.getMem(),
+                dbDst.getMem(),
+                dbSrc1.getDeviceOffset(),
+                dbDst.getDeviceOffset(),
+                region,
+                slicePitch1, 0,
+                slicePitch1 + slicePitch2, 0,
+                0, null, null);
+        // copy second matrix;
+        region[0] = slicePitch2;
+        region[1] = numHSlices * matrix2.getNrOfSlices();
+
+        long[] dstOffset = dbDst.getDeviceOffset();
+        long[] eOffset = new long[3];
+
+        eOffset[0] = dstOffset[0] + slicePitch1;
+        eOffset[1] = dstOffset[1];
+        eOffset[2] = dstOffset[2];
+
+        clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                dbSrc2.getMem(),
+                dbDst.getMem(),
+                dbSrc1.getDeviceOffset(),
+                eOffset,
+                region,
+                slicePitch2, 0,
+                slicePitch1 + slicePitch2, 0,
+                0, null, null);
+        dbDst.markGpuAsMaster();
+    }
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The even
+     * slices will be copied into the first destination matrix, the uneven
+     * slices will be copied into the second destination matrix.
+     *
+     * @param src the source matrix.
+     * @param dest1 the first destination matrix.
+     * @param dest2 the second destination matrix.
+     */
+    public static void unzip(imatrix src, imatrix dest1, imatrix dest2) {
+        FloatDeviceBuffer dbDest1 = dest1.getDeviceBuffer();
+        FloatDeviceBuffer dbDest2 = dest2.getDeviceBuffer();
+        FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
+
+        // copy dbSrc1 with interleave of size of dbSrc2 and offset 0.
+        dbDest1.upload();
+        dbDest2.upload();
+        // determin number of hyper slices to copy.
+        int numSlicesSrc = src.getNrOfHyperSlices();
+        int numSlicesDst1 = dest1.getNrOfHyperSlices();
+        int numSlicesDst2 = dest2.getNrOfHyperSlices();
+        int numHSlices = Math.min(Math.min(numSlicesSrc, numSlicesDst1), numSlicesDst2);
+
+        int slicePitch1 = dest1.getSliceSize() * Sizeof.cl_float;
+        int slicePitch2 = dest2.getSliceSize() * Sizeof.cl_float;
+
+        // copy first matrix
+        long region[] = new long[]{slicePitch1, numHSlices * dest1.getNrOfSlices(), 1};
+        clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                dbSrc.getMem(),
+                dbDest1.getMem(),
+                dbSrc.getDeviceOffset(),
+                dbDest1.getDeviceOffset(),
+                region,
+                slicePitch1 + slicePitch2, 0,
+                slicePitch1, 0,
+                0, null, null);
+        // copy second matrix;
+        region[0] = slicePitch2;
+        region[1] = numHSlices * dest2.getNrOfSlices();
+
+        long[] dstOffset = dbSrc.getDeviceOffset();
+        long[] eOffset = new long[3];
+
+        eOffset[0] = dstOffset[0] + slicePitch1;
+        eOffset[1] = dstOffset[1];
+        eOffset[2] = dstOffset[2];
+
+        clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                dbSrc.getMem(),
+                dbDest2.getMem(),
+                eOffset,
+                dbDest1.getDeviceOffset(),
+                region,
+                slicePitch1 + slicePitch2, 0,
+                slicePitch2, 0,
+                0, null, null);
+        dbDest1.markGpuAsMaster();
+        dbDest2.markGpuAsMaster();
     }
 
 }

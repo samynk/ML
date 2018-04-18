@@ -6,7 +6,6 @@ package dae.matrix.gpu;
 
 import dae.matrix.BufferSyncState;
 import dae.matrix.imatrix;
-import static org.jocl.CL.CL_MEM_READ_ONLY;
 import static org.jocl.CL.CL_MEM_READ_WRITE;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
@@ -20,16 +19,16 @@ public class FloatDeviceBuffer {
 
     private final imatrix cpuBuffer;
 
-    private cl_mem rMemPadded;
-    private cl_mem rwMemPadded;
+    private cl_mem memPadded;
+
     private int padding;
     private int deviceSize;
     private final long[] globalWorkSize = new long[1];
     private static final int LOCALSIZE = OpenCLKernel.DEFAULTWORKSIZE;
 
     private BufferSyncState cpuBufferState = BufferSyncState.UPTODATE;
-    private BufferSyncState rGPUBufferState = BufferSyncState.OUTOFDATE;
-    private BufferSyncState rwGPUBufferState = BufferSyncState.OUTOFDATE;
+    private BufferSyncState gpuBufferState = BufferSyncState.OUTOFDATE;
+
     private final int[] deviceDimension = new int[2];
 
     private final long[] deviceOffset = new long[3];
@@ -134,57 +133,26 @@ public class FloatDeviceBuffer {
         return globalWorkSize;
     }
 
-    public cl_mem getRMem() {
-        if (rMemPadded == null) {
-            rMemPadded = FMatrixOpGpu.createMem(cpuBuffer, padding, CL_MEM_READ_ONLY);
+    public cl_mem getMem() {
+        if (memPadded == null) {
+            memPadded = FMatrixOpGpu.createMem(cpuBuffer, padding, CL_MEM_READ_WRITE);
         }
-        return rMemPadded;
+        return memPadded;
     }
 
-    public cl_mem getRWMem() {
-        if (rwMemPadded == null) {
-            rwMemPadded = FMatrixOpGpu.createMem(cpuBuffer, padding, CL_MEM_READ_WRITE);
-        }
-        return rwMemPadded;
-    }
+    public cl_mem upload() {
+        cl_mem rmem = getMem();
 
-    public cl_mem uploadRMatrix() {
-        cl_mem rmem = getRMem();
-
-        if (rGPUBufferState == BufferSyncState.OUTOFDATE) {
-            // first try to copy on the device itself.
-            if (rwGPUBufferState == BufferSyncState.UPTODATE) {
-                GPU.copyRWBuffer(cpuBuffer);
-                rGPUBufferState = BufferSyncState.UPTODATE;
-            } else {
-                GPU.uploadRMatrix(cpuBuffer);
-                rGPUBufferState = BufferSyncState.UPTODATE;
-            }
+        if (gpuBufferState == BufferSyncState.OUTOFDATE) {
+            GPU.upload(cpuBuffer);
+            gpuBufferState = BufferSyncState.UPTODATE;
         }
         return rmem;
     }
 
-    public cl_mem uploadRWMatrix() {
-        cl_mem rwmem = getRWMem();
-        if (rwGPUBufferState == BufferSyncState.OUTOFDATE) {
-            if (rGPUBufferState == BufferSyncState.UPTODATE) {
-                GPU.copyRBuffer(cpuBuffer);
-                rwGPUBufferState = BufferSyncState.UPTODATE;
-            }else{
-                GPU.uploadRWMatrix(cpuBuffer);
-                rwGPUBufferState = BufferSyncState.UPTODATE;
-            }
-        }
-        return rwmem;
-    }
-
-    public void downloadMatrix() {
+    public void download() {
         if (cpuBufferState == BufferSyncState.OUTOFDATE) {
-            if (rGPUBufferState == BufferSyncState.UPTODATE) {
-                GPU.downloadRMatrix(cpuBuffer);
-            } else {
-                GPU.downloadRWMatrix(cpuBuffer);
-            }
+            GPU.download(cpuBuffer);
             cpuBufferState = BufferSyncState.UPTODATE;
         }
     }
@@ -266,25 +234,18 @@ public class FloatDeviceBuffer {
      * necessary.
      */
     public void syncHost() {
-        downloadMatrix();
+        download();
     }
 
-    public void markRWMatrixAsMaster() {
+    public void markGpuAsMaster() {
         this.cpuBufferState = BufferSyncState.OUTOFDATE;
-        this.rGPUBufferState = BufferSyncState.OUTOFDATE;
-        this.rwGPUBufferState = BufferSyncState.UPTODATE;
+        this.gpuBufferState = BufferSyncState.UPTODATE;
+        
     }
 
-    public void markRMatrixAsMaster() {
-        this.cpuBufferState = BufferSyncState.OUTOFDATE;
-        this.rGPUBufferState = BufferSyncState.UPTODATE;
-        this.rwGPUBufferState = BufferSyncState.OUTOFDATE;
-    }
-
-    public void markCpuMatrixAsMatrix() {
+    public void markCpuAsMaster() {
         this.cpuBufferState = BufferSyncState.UPTODATE;
-        this.rGPUBufferState = BufferSyncState.OUTOFDATE;
-        this.rwGPUBufferState = BufferSyncState.OUTOFDATE;
+        this.gpuBufferState = BufferSyncState.OUTOFDATE;
     }
 
 }
