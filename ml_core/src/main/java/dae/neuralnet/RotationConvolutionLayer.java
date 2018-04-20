@@ -4,8 +4,8 @@
  */
 package dae.neuralnet;
 
+import dae.matrix.IndexedFunction;
 import dae.matrix.fmatrix;
-import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
 import dae.matrix.zpmatrix;
 import dae.neuralnet.activation.ActivationFunction;
@@ -59,6 +59,8 @@ public class RotationConvolutionLayer implements ILayer {
      * The rotated weights.
      */
     private final imatrix rotatedKernels;
+    private boolean addAngleAsBias;
+    private fmatrix rotatedKernelsBias;
     /**
      * the new weights.
      */
@@ -194,6 +196,23 @@ public class RotationConvolutionLayer implements ILayer {
 
         this.batchSize = batchSize;
     }
+    
+    public void setAngles(float startAngle, float endAngle){
+        this.startAngle = startAngle;
+        this.endAngle = endAngle;
+    }
+
+    public void setAddAngleBias(boolean bias) {
+        this.addAngleAsBias = bias;
+        if (addAngleAsBias) {
+            float angleStep = (endAngle - startAngle) / (rotations - 1);
+            this.rotatedKernelsBias = new fmatrix(rotatedKernels.getNrOfRows(), rotatedKernels.getNrOfColumns(), rotatedKernels.getNrOfSlices());
+            rotatedKernelsBias.applyCellFunction((int row, int column, int slice, float value) -> {
+                int r = slice % features;
+                return startAngle + r*angleStep;
+            });
+        }
+    }
 
     @Override
     public ActivationFunction getActivationFunction() {
@@ -214,7 +233,7 @@ public class RotationConvolutionLayer implements ILayer {
         this.errors.setName("m_" + name + "_errors");
         this.newWeights.setName("m_" + name + "_newWeights");
         this.outputs.setName("m_" + name + "_outputs");
-        this.rotatedKernels.setName("m_" + name + "_rotatedKernels" );        
+        this.rotatedKernels.setName("m_" + name + "_rotatedKernels");
     }
 
     /**
@@ -271,7 +290,11 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public void forward() {
+        inputs.sync();
         fmatrix.rotateKernels(this.weights, rotations, startAngle, endAngle, this.rotatedKernels);
+        if ( addAngleAsBias ){
+            fmatrix.dotadd(rotatedKernels, rotatedKernels, this.rotatedKernelsBias);
+        }
         fmatrix.batchConvolve(inputs, this.rotatedKernels, stride, this.outputs);
 
         switch (function) {
@@ -289,10 +312,19 @@ public class RotationConvolutionLayer implements ILayer {
     }
 
     @Override
+    public imatrix getInputs() {
+        return inputs;
+    }
+
+    @Override
     public void calculateNewWeights(float learningRate) {
         rotatedKernels.reset();
         fmatrix.batchConvolve(inputs, deltas, this.stride, rotatedKernels);
+        if (this.addAngleAsBias){
+            fmatrix.dotsubtract(rotatedKernels, rotatedKernels, rotatedKernelsBias);            
+        }
         fmatrix.accumulateRotateKernels(rotatedKernels, rotations, startAngle, endAngle, newWeights);
+       
     }
 
     @Override
@@ -302,6 +334,7 @@ public class RotationConvolutionLayer implements ILayer {
         // backpropErrors matrix.
         fmatrix.batchBackpropCorrelate(this.zpDeltas, this.weights, this.stride, backpropErrors);
         fmatrix.copyIntoSlice(backpropErrors, errors);
+        backpropErrors.sync();
     }
 
     @Override
@@ -350,6 +383,7 @@ public class RotationConvolutionLayer implements ILayer {
         // Note: derivative is f'(net input) but this is typically expressed
         // in terms of the output of the activation function.
         // 2.a copy the outputs into the derivatives matrix.
+        this.outputs.sync();
         fmatrix.copyInto(this.outputs, this.derivatives);
 
         // 2.b apply the derivative of the activation function to the output.

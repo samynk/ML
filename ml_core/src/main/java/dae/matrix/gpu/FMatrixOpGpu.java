@@ -674,6 +674,19 @@ public class FMatrixOpGpu implements FMatrixOp {
     public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
         GPU.KERNEL_CONVOLV.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
     }
+    
+    /**
+     * Condense slices into one output with optional biases.
+     * @param input the input matrix.
+     * @param slicesPerGroup the number of slices per group.
+     * @param biases the nr of biases.
+     * @param weights the weight matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output){
+        GPU.KERNEL_CONVOLV.forwardPancake(input, slicesPerGroup, biases, weights, output);
+    }
 
     @Override
     public void reset(fmatrix m) {

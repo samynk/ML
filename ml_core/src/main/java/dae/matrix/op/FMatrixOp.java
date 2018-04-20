@@ -432,4 +432,14 @@ public interface FMatrixOp {
      */
     public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output);
 
+    /**
+     * Condense slices into one output with optional biases.
+     * @param input the input matrix.
+     * @param slicesPerGroup the number of slices per group.
+     * @param biases the nr of biases.
+     * @param weights the weight matrix.
+     * @param output the output matrix.
+     */
+    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output);
+
 }

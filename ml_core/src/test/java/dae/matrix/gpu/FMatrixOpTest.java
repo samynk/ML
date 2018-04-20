@@ -723,14 +723,14 @@ public class FMatrixOpTest {
 
     @Test
     public void testZip() {
-        fmatrix input1 = new fmatrix(7, 7, 4, 100);
+        fmatrix input1 = new fmatrix(14, 14, 24, 100);
         input1.randomize(-1, 1);
 
-        fmatrix input2 = new fmatrix(7, 7, 4, 100);
+        fmatrix input2 = new fmatrix(14, 14, 24, 100);
         input2.randomize(-1, 1);
 
-        fmatrix gpuDest = new fmatrix(7, 7, 8, 100);
-        fmatrix cpuDest = new fmatrix(7, 7, 8, 100);
+        fmatrix gpuDest = new fmatrix(14, 14, 48, 100);
+        fmatrix cpuDest = new fmatrix(14, 14, 48, 100);
         gpu.zip(input1, input2, gpuDest);
         cpu.zip(input1, input2, cpuDest);
 
@@ -738,12 +738,12 @@ public class FMatrixOpTest {
 
         assertMatrixEquals(gpuDest, cpuDest);
 
-        fmatrix cpuInput1 = new fmatrix(7, 7, 4, 100);
-        fmatrix cpuInput2 = new fmatrix(7, 7, 4, 100);
+        fmatrix cpuInput1 = new fmatrix(14, 14, 24, 100);
+        fmatrix cpuInput2 = new fmatrix(14, 14, 24, 100);
         cpu.unzip(cpuDest, cpuInput1, cpuInput2);
 
-        fmatrix gpuInput1 = new fmatrix(7, 7, 4, 100);
-        fmatrix gpuInput2 = new fmatrix(7, 7, 4, 100);
+        fmatrix gpuInput1 = new fmatrix(14, 14, 24, 100);
+        fmatrix gpuInput2 = new fmatrix(14, 14, 24, 100);
         gpu.unzip(gpuDest, gpuInput1, gpuInput2);
 
         assertMatrixEquals(input1, cpuInput1);
@@ -786,8 +786,32 @@ public class FMatrixOpTest {
 
         gpu.backpropMaxRotationPool(gpuDest, gpuMask, gpuBP);
         cpu.backpropMaxRotationPool(cpuDest, cpuMask, cpuBP);
-        
+
         gpuBP.sync();
-        assertMatrixEquals(cpuBP,gpuBP);
+        assertMatrixEquals(cpuBP, gpuBP);
+    }
+    
+    @Test 
+    public void testPancake(){
+        int rows = 20;
+        int columns = 20;
+        int slices = 20;
+        int batchSize = 50;
+        
+        int slicesPerGroup = 4;
+        int biases = 1;
+        
+        fmatrix input = new fmatrix(rows,columns,slices, batchSize);
+        int weightSlices = slicesPerGroup*(biases+slices / slicesPerGroup);
+        fmatrix weights = new fmatrix(rows, columns, weightSlices, batchSize);
+        
+        fmatrix outputGPU = new fmatrix(rows, columns, slices/slicesPerGroup, batchSize);
+        fmatrix outputCPU = new fmatrix(rows, columns, slices/slicesPerGroup, batchSize);
+        
+        cpu.forwardPancake(input, slicesPerGroup, biases, weights, outputCPU);
+        gpu.forwardPancake(input, slicesPerGroup, biases, weights, outputGPU);
+        
+        outputGPU.sync();
+        assertMatrixEquals(outputCPU, outputGPU);
     }
 }

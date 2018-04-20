@@ -134,6 +134,11 @@ public class MaxRotationPoolLayer implements ILayer {
     public void setInputs(imatrix input) {
         fmatrix.copyIntoSlice(input, this.inputs);
     }
+    
+    @Override
+    public imatrix getInputs() {
+        return inputs;
+    }
 
     @Override
     public void setIdeal(imatrix ideals) {

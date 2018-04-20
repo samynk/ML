@@ -195,6 +195,11 @@ public abstract class AbstractLayer implements ILayer {
     public void setInputs(imatrix inputs) {
         fmatrix.copyIntoSlice(inputs, this.inputs);
     }
+    
+    @Override
+    public imatrix getInputs() {
+        return inputs;
+    }
 
     /**
      * Sets the ideal values for this layer.

@@ -113,7 +113,7 @@ public class TestDigitRecognition1 {
 
             dl.forward(image);
 
-            fmatrix result = dl.getLastLayer().getOutputs();
+            fmatrix result = (fmatrix)dl.getLastLayer().getOutputs();
             result.maxPerRow(cs);
 
             for (int br = 0; br < batchSize; ++br) {

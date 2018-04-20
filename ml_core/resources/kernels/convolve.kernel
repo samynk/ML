@@ -382,3 +382,64 @@ __kernel void inverseMaxRotation(
     int oIndex = rcshToIndex( (int4)(rcsh.x, rcsh.y, oSlice, rcsh.w),oDim);
     output[min(oIndex,desc.z)] = value;
 }
+
+// iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
+// oDim : (x,y,z) rowSize, sliceSize, hyperSliceSize of output.
+// groups : (x,y) slicesPerGroup, nrOfBiases.
+__kernel void forwardPancake(
+    __global float* input,
+    const int3 iDim,
+    __global float* weights,
+    const int3 wDim,
+    __global float* output,
+    const int3 oDim,
+    const int2 groups
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
+    
+    int slicesPerGroup = groups.x;
+    int nrOfBiases = groups.y;
+
+    int inputBaseSlice = rcsh.z * slicesPerGroup;
+    int weightBaseSlice = rcsh.z * (slicesPerGroup+nrOfBiases);
+    
+    float sum = 0;
+    
+    for(int s = 0 ; s < slicesPerGroup; ++s ){
+        int4 iRCSH = (int4)(rcsh.x, rcsh.y, inputBaseSlice + s, rcsh.w);
+        int iIndex = rcshToIndex(iRCSH,iDim);
+        int4 wRCSH = (int4)(rcsh.x, rcsh.y, weightBaseSlice + s, rcsh.w);
+        int wIndex = rcshToIndex(wRCSH,wDim);
+
+        sum += input[iIndex] * weights[wIndex];
+    }
+    for(int b = 0 ; b < nrOfBiases; b++)
+    {
+        int4 wRCSH = (int4)(rcsh.x, rcsh.y, inputBaseSlice + slicesPerGroup + b , rcsh.w);
+        int wIndex = rcshToIndex(wRCSH,wDim);
+        sum += weights[wIndex];
+    }
+    output[index] = sum;
+}
+
+// iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
+// oDim : (x,y,z) rowSize, sliceSize, hyperSliceSize of output.
+// groups : (x,y) slicesPerGroup, nrOfBiases.
+__kernel void deltasPancake(
+    __global float* input,
+    const int3 iDim,
+    __global float* deltas,
+    const int3 wDim,
+    __global float* deltaWeights,
+    const int3 oDim,
+    const int2 groups
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
+    
+    
+    deltaWeights[index] = 0;
+}

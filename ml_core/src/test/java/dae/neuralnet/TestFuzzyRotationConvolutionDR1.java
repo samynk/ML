@@ -4,6 +4,7 @@
  */
 package dae.neuralnet;
 
+import dae.matrix.Dimension;
 import dae.matrix.fmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.cost.CrossEntropyCostFunction;
@@ -27,10 +28,10 @@ import static org.junit.Assert.*;
  */
 public class TestFuzzyRotationConvolutionDR1 {
 
-    private static final int TRAIN_ITERATIONS = 100000;
+    private static final int TRAIN_ITERATIONS = 20000;
     private static final int TEST_ITERATIONS = -1;
     private static final int BATCHSIZE = 100;
-    private static final float LEARNING_RATE = 0.05f;
+    private static final float LEARNING_RATE = 0.01f;
 
     private String neuralNetBase = "2018_3_22/10_29";
 
@@ -63,7 +64,7 @@ public class TestFuzzyRotationConvolutionDR1 {
         fmatrix trainSetLabels = blr.getResult();
         System.out.println(trainSetLabels.getSizeAsString());
 
-        int numStartFilters = 4;
+        int numStartFilters = 6;
 
         RotationConvolutionLayer layer1 = new RotationConvolutionLayer(28, 28, numStartFilters, 16, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
         layer1.setName("convolution_layer 1");
@@ -71,24 +72,32 @@ public class TestFuzzyRotationConvolutionDR1 {
         RotationPoolLayer rpl = new RotationPoolLayer(28, 28, numStartFilters, 16, BATCHSIZE);
 
         MaxRotationPoolLayer mpl = new MaxRotationPoolLayer(28, 28, numStartFilters * 2, 2, 2, BATCHSIZE);
+        mpl.setName("max rotation pool");
 
-        ConvolutionLayer convLayer2 = new ConvolutionLayer(14, 14, numStartFilters * 2, 4, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
-        layer1.setName("convolution_layer 2");
+        int mplOutputs = mpl.getNrOfOutputs();
 
-        PoolLayer pl2 = new PoolLayer(14, 14, numStartFilters * 8, 2, 2, BATCHSIZE);
+        RotationConvolutionLayer vl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        vl2.setAngles(-(float) Math.PI / 8, (float) Math.PI / 8);
+        RotationConvolutionLayer rl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        rl2.setAngles(-(float) Math.PI / 8, (float) Math.PI / 8);
+        rl2.setAddAngleBias(true);
+        CompositeLayer cl = new CompositeLayer(
+                Dimension.Dim(14, 14, numStartFilters * 2, BATCHSIZE), 
+                Dimension.Dim(14, 14, numStartFilters * 8 * 8, BATCHSIZE), 
+                vl2, rl2);
+        cl.setName("Composite layer");
+
+        PoolLayer pl2 = new PoolLayer(14, 14, numStartFilters * 8 * 8, 2, 2, BATCHSIZE);
         pl2.setName("pool layer 2");
 
-        ConvolutionLayer convLayer3 = new ConvolutionLayer(7, 7, numStartFilters * 8, 4, 3, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
-        layer1.setName("convolution_layer 3");
-
-        AbstractLayer layer6 = new Layer(convLayer3.getNrOfOutputs(), 1, 1000, BATCHSIZE, ActivationFunction.RELU);
+        AbstractLayer layer6 = new Layer(pl2.getNrOfOutputs(), 1, 1000, BATCHSIZE, ActivationFunction.RELU);
         layer6.setName("final_layer");
 
         AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
         layer7.setName("final_layer");
 
         LearningRate lrd = new LearningRateConst(LEARNING_RATE / BATCHSIZE);
-        DeepLayer dl = new DeepLayer(lrd, layer1, rpl, mpl, convLayer2, pl2, convLayer3, layer6, layer7);
+        DeepLayer dl = new DeepLayer(lrd, layer1, rpl, mpl, cl, pl2, layer6, layer7);
 
         dl.setCostFunction(new CrossEntropyCostFunction());
         Random r = new Random(System.currentTimeMillis());

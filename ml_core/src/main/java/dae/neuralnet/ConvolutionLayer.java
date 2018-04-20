@@ -261,6 +261,11 @@ public class ConvolutionLayer implements ILayer {
     }
 
     @Override
+    public imatrix getInputs() {
+        return inputs;
+    }
+
+    @Override
     public void calculateNewWeights(float learningRate) {
         fmatrix.batchConvolve(inputs, deltas, this.stride, newWeights);
     }

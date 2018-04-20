@@ -51,10 +51,10 @@ public class DeepLayer {
             ILayer next = layers[i + 1];
             if (current.getNrOfOutputs() != next.getNrOfInputs()) {
                 int outputs = current.getNrOfOutputs();
-                int inputs = current.getNrOfInputs();
+                int inputs = next.getNrOfInputs();
                 validNetwork = false;
                 throw new IllegalArgumentException("Error while constructing a DeepLayer object.\n"
-                        + "Outputs of layer " + i + " do not match inputs of the next layer.\n" +
+                        + "Outputs of layer " + layers[i].getName() + " do not match inputs of the next layer.\n" +
                         "number of inputs :" + inputs +", outputs: " + outputs+ "\n" );
             }
         }
@@ -221,9 +221,8 @@ public class DeepLayer {
         setInputs(input);
         for (int i = 0; i < layers.length; ++i) {
             layers[i].forward();
-            String layer = layers[i].getName();
             if (i + 1 < layers.length) {
-                fmatrix outputs = layers[i].getOutputs();
+                imatrix outputs = layers[i].getOutputs();
                 layers[i + 1].setInputs(outputs);
             }
         }

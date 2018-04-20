@@ -6,6 +6,7 @@ package dae.neuralnet;
 
 import dae.matrix.Cell;
 import dae.matrix.fmatrix;
+import dae.matrix.imatrix;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
 import java.awt.Color;
@@ -75,7 +76,7 @@ public class DigitRecognitionTester {
             image.makeMaster();
             dl.forward(image);
 
-            fmatrix result = dl.getLastLayer().getOutputs();
+            fmatrix result = (fmatrix)dl.getLastLayer().getOutputs();
             result.sync();
             result.maxPerColumn(cs);
             target.maxPerColumn(ts);

@@ -34,9 +34,10 @@ public interface ILayer {
      * @return the total number of outputs.
      */
     public int getNrOfOutputs();
-    
+
     /**
      * Returns the activation function for this layer.
+     *
      * @return the activation function.
      */
     public ActivationFunction getActivationFunction();
@@ -53,6 +54,13 @@ public interface ILayer {
      * @param input the input of this layer.
      */
     public void setInputs(imatrix input);
+
+    /**
+     * Gets the inputs of this layer.
+     *
+     * @return the inputs of this layer.
+     */
+    public imatrix getInputs();
 
     /**
      * Sets the ideal values for this layer.
@@ -76,7 +84,7 @@ public interface ILayer {
      * @return the output matrix of this layer, with the result expressed as a 1
      * x nrOfOutputs matrix.
      */
-    public fmatrix getOutputs();
+    public imatrix getOutputs();
 
     /**
      * Performs the back propagation algorithm with the provided ideals and the
@@ -105,6 +113,7 @@ public interface ILayer {
 
     /**
      * Apply the changes in weights to the weight matrix.
+     *
      * @param factor the factor with which to multiply the weight deltas with.
      */
     public void adaptWeights(float factor);
@@ -117,7 +126,7 @@ public interface ILayer {
      * @param max the maximum value for the random weight.
      */
     public void randomizeWeights(Random r, float min, float max);
-    
+
     /**
      * Analyzes the weights in the layer.
      *
@@ -137,7 +146,7 @@ public interface ILayer {
      * @param file the file location to write to.
      */
     public void writeOutputImage(String file);
-    
+
     /**
      * Syncs the matrices with the matrices on the gpu.
      */

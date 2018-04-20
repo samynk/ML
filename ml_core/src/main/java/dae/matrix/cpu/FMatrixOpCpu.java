@@ -1021,6 +1021,42 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     /**
+     * Condense slices into one output with optional biases.
+     *
+     * @param input the input matrix.
+     * @param slicesPerGroup the number of slices per group.
+     * @param biases the nr of biases.
+     * @param weights the weight matrix.
+     * @param output the output matrix.
+     */
+    @Override
+    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output) {
+
+        for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < output.getNrOfSlices(); ++s) {
+                int baseInputSlice = s * slicesPerGroup;
+                int baseWeightSlice = s * (slicesPerGroup + biases);
+
+                for (int c = 0; c < output.getNrOfColumns(); ++c) {
+                    for (int r = 0; r < output.getNrOfRows(); ++r) {
+                        float sum = 0;
+                        for (int sg = 0; sg < slicesPerGroup; ++sg) {
+                            float val = input.get(r, c, baseInputSlice + sg, h);
+                            float w = weights.get(r, c, baseWeightSlice + sg, h);
+                            sum += val * w;
+                        }
+                        for (int b = 0; b < biases; ++b) {
+                            float w = weights.get(r, c, baseWeightSlice + slicesPerGroup + b, h);
+                            sum += w;
+                        }
+                        output.set(r, c, s, h, sum);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Randomizes a matrix between the given bound.
      *
      * @param m the matrix to randomize.

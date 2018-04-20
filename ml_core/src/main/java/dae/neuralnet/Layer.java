@@ -6,6 +6,8 @@ import dae.matrix.tmatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import dae.neuralnet.analysis.WeightAnalysis;
 import dae.neuralnet.analysis.WeightAnalyzer;
+import dae.neuralnet.gradient.AdamGradientAlgorithm;
+import dae.neuralnet.gradient.GradientAlgorithm;
 import java.nio.file.Paths;
 import java.util.Random;
 
@@ -23,14 +25,10 @@ import java.util.Random;
 public class Layer extends AbstractLayer {
 
     // adam test
-    private final imatrix moment;
-    private final imatrix velocity;
-
-    private final float beta1 = 0.9f;
-    private float beta1Corr = beta1;
-    private final float beta2 = 0.999f;
-    private float beta2Corr = beta2;
-    private final float epsilon = 1e-8f;
+    /**
+     * The gradient algorithm.
+     */
+    private GradientAlgorithm gradientAlgorithm;
 
     private final imatrix weights;
     private final imatrix tweights;
@@ -120,9 +118,8 @@ public class Layer extends AbstractLayer {
     public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af, imatrix weights) {
         super(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af);
         this.weights = weights;
-
-        this.moment = new fmatrix(weights.getNrOfRows(), weights.getNrOfColumns());
-        this.velocity = new fmatrix(weights.getNrOfRows(), weights.getNrOfColumns());
+        
+        gradientAlgorithm = new AdamGradientAlgorithm(weights);
 
         this.tweights = new tmatrix(weights);
         this.tdeltas = new tmatrix(deltas);
@@ -232,16 +229,7 @@ public class Layer extends AbstractLayer {
 
     @Override
     public void adaptWeights(float factor) {
-        fmatrix.dotadd(moment, beta1, moment, 1 - beta1, deltaWeights);
-        fmatrix.adamVelocity(velocity, beta2, velocity, deltaWeights);
-
-        // beta1 and beta2 need to die out.
-        fmatrix.adamAdaptWeights(weights, -factor, beta1Corr, beta2Corr, epsilon, moment, velocity);
-        //fmatrix.dotadd(weights, 1, weights, factor, deltaWeights);
-        beta1Corr *= 0.9f;
-        beta2Corr *= 0.9f;
-//        beta1Corr *= beta1;
-//        beta2Corr *= beta2;
+        gradientAlgorithm.adaptWeights(deltaWeights, factor);
     }
 
     /**
@@ -253,7 +241,7 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void randomizeWeights(Random r, float min, float max) {
-        weights.applyFunction(x -> (float) r.nextGaussian() / 10.0f);
+        weights.applyFunction(x -> (float)r.nextGaussian() / 10.0f);
     }
 
     public void printInputs() {

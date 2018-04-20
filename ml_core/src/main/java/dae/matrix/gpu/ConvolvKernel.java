@@ -31,6 +31,9 @@ public class ConvolvKernel extends OpenCLKernel {
     private cl_kernel accumulateRotateKernel;
     private cl_kernel maxRotation;
     private cl_kernel inverseMaxRotation;
+    
+    private cl_kernel forwardPancake;
+    private cl_kernel deltasPancake;
 
     private final long[] localWorkSize = new long[]{DEFAULTWORKSIZE};
 
@@ -60,6 +63,8 @@ public class ConvolvKernel extends OpenCLKernel {
         accumulateRotateKernel = this.createKernel("accumulateRotateKernels");
         maxRotation = this.createKernel("maxRotation");
         inverseMaxRotation = this.createKernel("inverseMaxRotation");
+        forwardPancake = this.createKernel("forwardPancake");
+        deltasPancake = this.createKernel("deltasPancake");
         super.releaseProgram();
     }
 
@@ -392,6 +397,46 @@ public class ConvolvKernel extends OpenCLKernel {
                 null);
 
         outputDB.markGpuAsMaster();
+    }
+    
+    public void forwardPancake(imatrix input,int slicesPerGroup, int biases, imatrix weights, imatrix output)
+    {
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        cl_mem memInput = inputDB.upload();
+
+        FloatDeviceBuffer weightDB = weights.getDeviceBuffer();
+        cl_mem memWeights = weightDB.upload();
+
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+        cl_mem memOutput = outputDB.getMem();
+
+        clSetKernelArg(forwardPancake, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(forwardPancake, 1, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
+        clSetKernelArg(forwardPancake, 2, Sizeof.cl_mem, Pointer.to(memWeights));
+        clSetKernelArg(forwardPancake, 3, Sizeof.cl_int4, Pointer.to(weightDB.getDimensionSizes()));
+        clSetKernelArg(forwardPancake, 4, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(forwardPancake, 5, Sizeof.cl_int4,Pointer.to(outputDB.getDimensionSizes()));
+        clSetKernelArg(forwardPancake, 6, Sizeof.cl_int2, Pointer.to(new int[]{slicesPerGroup, biases}));
+
+        // first dimension is (x,y) of kernel to rotate
+        // second dimension is slice of filter.
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                forwardPancake,
+                1,
+                null,
+                outputDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        outputDB.markGpuAsMaster();
+    }
+    
+    public void deltasPancake( imatrix input, imatrix deltas, int slicesPerGroup, int biases, imatrix deltaWeights)
+    {
+        
     }
 
 }

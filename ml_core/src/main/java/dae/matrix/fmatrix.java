@@ -145,10 +145,10 @@ public class fmatrix implements imatrix {
     public String getName() {
         return name;
     }
-    
+
     /**
      * Sets the name of the matrix object.
-     * 
+     *
      * @param name the name of the object.
      */
     @Override
@@ -1193,11 +1193,11 @@ public class fmatrix implements imatrix {
     public static void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         matrixOp.batchBackpropMaxPool(input, maskLayer, scaleX, scaleY, output);
     }
-    
-    public static void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer){
-        matrixOp.maxRotationPool(input,output,maskLayer);
+
+    public static void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer) {
+        matrixOp.maxRotationPool(input, output, maskLayer);
     }
-    
+
     /**
      * Transfers the maximum values into the output matrix at the correct cell
      * location as indicated by the masklayer.
@@ -1207,7 +1207,7 @@ public class fmatrix implements imatrix {
      * output matrix.
      * @param output the output matrix.
      */
-    public static void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output){
+    public static void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output) {
         matrixOp.backpropMaxRotationPool(input, maskLayer, output);
     }
 
@@ -1291,6 +1291,18 @@ public class fmatrix implements imatrix {
      */
     public static void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
         matrixOp.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
+    }
+
+    /**
+     * Condense slices into one output with optional biases.
+     * @param input the input matrix.
+     * @param slicesPerGroup the number of slices per group.
+     * @param biases the nr of biases.
+     * @param weights the weight matrix.
+     * @param output the output matrix.
+     */
+    public static void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output) {
+        matrixOp.forwardPancake(input, slicesPerGroup, biases, weights, output);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -1522,6 +1534,16 @@ public class fmatrix implements imatrix {
     }
 
     /**
+     * Creates a new matrix with the given dimension.
+     *
+     * @param d the dimension of the matrix.
+     * @return a new matrix with the given dimension.
+     */
+    public static imatrix create(Dimension d) {
+        return new fmatrix(d.getRows(), d.getColumns(), d.getSlices(), d.getHyperSlices());
+    }
+
+    /**
      * Copies the first row of every hyperslice of the source matrix into the
      * destination matrix according to a column major ordering.
      *
@@ -1728,8 +1750,8 @@ public class fmatrix implements imatrix {
                     float v = m.get(r, c, slice);
                     float p = v < 0 ? v * negFactor : v * posFactor;
                     int pi = (int) Math.round(p);
-                    
-                    bi.setRGB(imageColB + c, imageRowB + r, v < 0 ?  (pi << 16) : pi);
+
+                    bi.setRGB(imageColB + c, imageRowB + r, v < 0 ? (pi << 16) : pi);
                 }
             }
         }

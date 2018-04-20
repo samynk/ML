@@ -277,7 +277,7 @@ public class TestLayer {
 
             dl.forward(image);
 
-            fmatrix result = dl.getLastLayer().getOutputs();
+            fmatrix result = (fmatrix) dl.getLastLayer().getOutputs();
             Cell c = result.max();
 
             if (c.column == digit) {
@@ -396,7 +396,7 @@ public class TestLayer {
             input.set(0, 0, T);
             dl.forward(input);
 
-            fmatrix output = dl.getLastLayer().getOutputs();
+            fmatrix output = (fmatrix)dl.getLastLayer().getOutputs();
             float result = output.get(0, 0);
 
             if (test(result, T, cutoff)) {
@@ -462,7 +462,7 @@ public class TestLayer {
             input.set(0, 0, T);
             dl.forward(input);
 
-            fmatrix output = dl.getLastLayer().getOutputs();
+            fmatrix output = (fmatrix)dl.getLastLayer().getOutputs();
             float result = output.get(0, 0);
 
             if (test(result, T, cutoff)) {
@@ -508,7 +508,7 @@ public class TestLayer {
             input.set(0, 1, H);
             dl.forward(input);
 
-            fmatrix output = dl.getLastLayer().getOutputs();
+            fmatrix output = (fmatrix)dl.getLastLayer().getOutputs();
             float result1 = output.get(0, 0);
             float result2 = output.get(0, 1);
 
