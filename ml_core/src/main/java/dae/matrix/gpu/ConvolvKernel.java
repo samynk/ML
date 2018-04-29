@@ -25,8 +25,12 @@ public class ConvolvKernel extends OpenCLKernel {
 
     private cl_kernel convolution;
     private cl_kernel batchConvolution;
+    private cl_kernel batchConvolutionBias;
+    private cl_kernel deltasBatchConvolution;
+    
     private cl_kernel batchCorrelation;
     private cl_kernel batchBackpropCorrelation;
+    
     private cl_kernel rotateKernel;
     private cl_kernel accumulateRotateKernel;
     private cl_kernel maxRotation;
@@ -34,6 +38,7 @@ public class ConvolvKernel extends OpenCLKernel {
     
     private cl_kernel forwardPancake;
     private cl_kernel deltasPancake;
+    private cl_kernel backPropPancake;
 
     private final long[] localWorkSize = new long[]{DEFAULTWORKSIZE};
 
@@ -57,6 +62,8 @@ public class ConvolvKernel extends OpenCLKernel {
         super.init(context, commandQueue);
         convolution = this.createKernel("convolution");
         batchConvolution = this.createKernel("batchConvolution");
+        batchConvolutionBias = this.createKernel("batchConvolutionBias");
+        deltasBatchConvolution = this.createKernel("deltasBatchConvolution");
         batchCorrelation = this.createKernel("batchCorrelate");
         batchBackpropCorrelation = this.createKernel("batchBackpropCorrelate");
         rotateKernel = this.createKernel("rotateKernels");
@@ -65,6 +72,7 @@ public class ConvolvKernel extends OpenCLKernel {
         inverseMaxRotation = this.createKernel("inverseMaxRotation");
         forwardPancake = this.createKernel("forwardPancake");
         deltasPancake = this.createKernel("deltasPancake");
+        backPropPancake = this.createKernel("backPropPancake");
         super.releaseProgram();
     }
 
@@ -126,6 +134,89 @@ public class ConvolvKernel extends OpenCLKernel {
         clEnqueueNDRangeKernel(
                 commandQueue,
                 batchConvolution,
+                1,
+                null,
+                outputDB.getGlobalWorkSize(),
+                localWorkSize,
+                0,
+                null,
+                null);
+
+        outputDB.markGpuAsMaster();
+    }
+    
+    public void deltasBatchConvolv(imatrix input, imatrix deltas, int stride, imatrix kernel) {
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        
+        int[] ps = new int[]{stride};
+        int[] fps = new int[]{deltas.getNrOfSlices() / input.getNrOfSlices()};
+
+        cl_mem memInput = inputDB.upload();
+
+        FloatDeviceBuffer deltasDB = deltas.getDeviceBuffer();
+        cl_mem memDeltas = deltasDB.upload();
+
+        FloatDeviceBuffer outputDB = kernel.getDeviceBuffer();
+
+        cl_mem memOutput = outputDB.getMem();
+        GPU.zeroFill(kernel);
+
+        clSetKernelArg(deltasBatchConvolution, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(deltasBatchConvolution, 1, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
+        clSetKernelArg(deltasBatchConvolution, 2, Sizeof.cl_mem, Pointer.to(memDeltas));
+        clSetKernelArg(deltasBatchConvolution, 3, Sizeof.cl_int4, Pointer.to(deltasDB.getDimensionSizes()));
+        clSetKernelArg(deltasBatchConvolution, 4, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(deltasBatchConvolution, 5, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
+        clSetKernelArg(deltasBatchConvolution, 6, Sizeof.cl_int, Pointer.to(fps));
+        clSetKernelArg(deltasBatchConvolution, 7, Sizeof.cl_int, Pointer.to(ps));
+        clSetKernelArg(deltasBatchConvolution, 8, Sizeof.cl_int, Pointer.to(new int[]{kernel.getSize()}));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                deltasBatchConvolution,
+                1,
+                null,
+                outputDB.getGlobalWorkSize(),
+                localWorkSize,
+                0,
+                null,
+                null);
+
+        outputDB.markGpuAsMaster();
+    }
+    
+    public void batchConvolvBias(imatrix input, imatrix filter, imatrix bias, int stride, imatrix output) {
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        int[] fDim = new int[]{filter.getNrOfRows(), filter.getNrOfColumns()};
+        int[] ps = new int[]{stride};
+        int[] fps = new int[]{filter.getNrOfSlices() / input.getNrOfSlices()};
+
+        cl_mem memInput = inputDB.upload();
+
+        FloatDeviceBuffer filterDB = filter.getDeviceBuffer();
+        cl_mem memFilter = filterDB.upload();
+        
+        FloatDeviceBuffer biasDB = bias.getDeviceBuffer();
+        cl_mem memBias = biasDB.upload();
+
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+
+        cl_mem memOutput = outputDB.getMem();
+        GPU.zeroFill(output);
+
+        clSetKernelArg(batchConvolutionBias, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(batchConvolutionBias, 1, Sizeof.cl_mem, Pointer.to(memFilter));
+        clSetKernelArg(batchConvolutionBias, 2, Sizeof.cl_mem, Pointer.to(memBias));
+        clSetKernelArg(batchConvolutionBias, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(batchConvolutionBias, 4, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
+        clSetKernelArg(batchConvolutionBias, 5, Sizeof.cl_int2, Pointer.to(fDim));
+        clSetKernelArg(batchConvolutionBias, 6, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
+        clSetKernelArg(batchConvolutionBias, 7, Sizeof.cl_int, Pointer.to(fps));
+        clSetKernelArg(batchConvolutionBias, 8, Sizeof.cl_int, Pointer.to(ps));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                batchConvolutionBias,
                 1,
                 null,
                 outputDB.getGlobalWorkSize(),
@@ -301,6 +392,7 @@ public class ConvolvKernel extends OpenCLKernel {
         clSetKernelArg(accumulateRotateKernel, 1, Sizeof.cl_int4, Pointer.to(fDim));
         clSetKernelArg(accumulateRotateKernel, 2, Sizeof.cl_mem, Pointer.to(memSincos));
         clSetKernelArg(accumulateRotateKernel, 3, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(accumulateRotateKernel, 4, Sizeof.cl_int, Pointer.to(new int[]{kernelOutput.getSize()}));
 
         // first dimension is (x,y) of kernel to rotate
         // second dimension is slice of filter.
@@ -399,13 +491,16 @@ public class ConvolvKernel extends OpenCLKernel {
         outputDB.markGpuAsMaster();
     }
     
-    public void forwardPancake(imatrix input,int slicesPerGroup, int biases, imatrix weights, imatrix output)
+    public void forwardPancake(imatrix input,int slicesPerGroup, imatrix weights, imatrix biases, imatrix output)
     {
         FloatDeviceBuffer inputDB = input.getDeviceBuffer();
         cl_mem memInput = inputDB.upload();
 
         FloatDeviceBuffer weightDB = weights.getDeviceBuffer();
         cl_mem memWeights = weightDB.upload();
+        
+        FloatDeviceBuffer biasDB = biases.getDeviceBuffer();
+        cl_mem memBias = biasDB.upload();
 
         FloatDeviceBuffer outputDB = output.getDeviceBuffer();
         cl_mem memOutput = outputDB.getMem();
@@ -414,12 +509,14 @@ public class ConvolvKernel extends OpenCLKernel {
         clSetKernelArg(forwardPancake, 1, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
         clSetKernelArg(forwardPancake, 2, Sizeof.cl_mem, Pointer.to(memWeights));
         clSetKernelArg(forwardPancake, 3, Sizeof.cl_int4, Pointer.to(weightDB.getDimensionSizes()));
-        clSetKernelArg(forwardPancake, 4, Sizeof.cl_mem, Pointer.to(memOutput));
-        clSetKernelArg(forwardPancake, 5, Sizeof.cl_int4,Pointer.to(outputDB.getDimensionSizes()));
-        clSetKernelArg(forwardPancake, 6, Sizeof.cl_int2, Pointer.to(new int[]{slicesPerGroup, biases}));
+        
+        clSetKernelArg(forwardPancake, 4, Sizeof.cl_mem, Pointer.to(memBias));
+        clSetKernelArg(forwardPancake, 5, Sizeof.cl_int4, Pointer.to(biasDB.getDimensionSizes()));
+        
+        clSetKernelArg(forwardPancake, 6, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(forwardPancake, 7, Sizeof.cl_int4,Pointer.to(outputDB.getDimensionSizes()));
+        clSetKernelArg(forwardPancake, 8, Sizeof.cl_int2, Pointer.to(new int[]{slicesPerGroup,output.getSize()}));
 
-        // first dimension is (x,y) of kernel to rotate
-        // second dimension is slice of filter.
         clEnqueueNDRangeKernel(
                 commandQueue,
                 forwardPancake,
@@ -434,9 +531,76 @@ public class ConvolvKernel extends OpenCLKernel {
         outputDB.markGpuAsMaster();
     }
     
-    public void deltasPancake( imatrix input, imatrix deltas, int slicesPerGroup, int biases, imatrix deltaWeights)
-    {
-        
-    }
+    public void deltasPancake( imatrix input, imatrix deltas, int slicesPerGroup, imatrix weightDeltas, imatrix biasDeltas)
+    {   
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        cl_mem memInput = inputDB.upload();
 
+        FloatDeviceBuffer deltasDB = deltas.getDeviceBuffer();
+        cl_mem memDeltas = deltasDB.upload();
+        
+        FloatDeviceBuffer weightDeltasDB = weightDeltas.getDeviceBuffer();
+        cl_mem memWeightDeltas = weightDeltasDB.getMem();
+
+        clSetKernelArg(deltasPancake, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(deltasPancake, 1, Sizeof.cl_int4, Pointer.to(inputDB.getDimensionSizes()));
+        
+        clSetKernelArg(deltasPancake, 2, Sizeof.cl_mem, Pointer.to(memDeltas));
+        clSetKernelArg(deltasPancake, 3, Sizeof.cl_int4, Pointer.to(deltasDB.getDimensionSizes()));
+        
+        clSetKernelArg(deltasPancake, 4, Sizeof.cl_mem, Pointer.to(memWeightDeltas));
+        clSetKernelArg(deltasPancake, 5, Sizeof.cl_int4, Pointer.to(weightDeltasDB.getDimensionSizes()));
+        
+        clSetKernelArg(deltasPancake, 6, Sizeof.cl_int, Pointer.to(new int[]{slicesPerGroup}));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                deltasPancake,
+                1,
+                null,
+                weightDeltasDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        weightDeltasDB.markGpuAsMaster();
+        fmatrix.copyInto(deltas, biasDeltas);
+        biasDeltas.getDeviceBuffer().markGpuAsMaster();
+    }
+    
+    public void backpropPancake( imatrix deltas, imatrix weights, int slicesPerGroup, imatrix output)
+    { 
+        FloatDeviceBuffer deltaDB = deltas.getDeviceBuffer();
+        cl_mem memInput = deltaDB.upload();
+
+        FloatDeviceBuffer weightDB = weights.getDeviceBuffer();
+        cl_mem memDeltas = weightDB.upload();
+        
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+        cl_mem memOutput = outputDB.getMem();
+
+        clSetKernelArg(backPropPancake, 0, Sizeof.cl_mem, Pointer.to(memInput));
+        clSetKernelArg(backPropPancake, 1, Sizeof.cl_int4, Pointer.to(deltaDB.getDimensionSizes()));
+        
+        clSetKernelArg(backPropPancake, 2, Sizeof.cl_mem, Pointer.to(memDeltas));
+        clSetKernelArg(backPropPancake, 3, Sizeof.cl_int4, Pointer.to(weightDB.getDimensionSizes()));
+        
+        clSetKernelArg(backPropPancake, 4, Sizeof.cl_mem, Pointer.to(memOutput));
+        clSetKernelArg(backPropPancake, 5, Sizeof.cl_int4, Pointer.to(outputDB.getDimensionSizes()));
+        
+        clSetKernelArg(backPropPancake, 6, Sizeof.cl_int, Pointer.to(new int[]{slicesPerGroup}));
+
+        clEnqueueNDRangeKernel(commandQueue,
+                backPropPancake,
+                1,
+                null,
+                outputDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        outputDB.markGpuAsMaster();
+    }
 }

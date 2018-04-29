@@ -13,6 +13,8 @@ import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.activation.ActivationFunction;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -98,6 +100,58 @@ public class FMatrixOpCpu implements FMatrixOp {
                 for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
                     float c = convolveSingle(or, oc, filterSlice, input, inputSlice, zeroPadding, filter, stride);
                     output.set(or, oc, filterSlice, c);
+                }
+            }
+        }
+    }
+
+    /**
+     * Applies a convolution filter on the input matrix, with the slices taken
+     * into account. A bias term will be added to each output cell as defined in
+     * the bias matrix which contains the bias terms in rows.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param bias a row matrix with a bias term per filter slice.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    @Override
+    public void batchConvolve(imatrix input, imatrix filter, imatrix bias, int stride, imatrix output) {
+        int zeroPadding = input.getZeroPadding();
+        int filtersPerInputSlice = filter.getNrOfSlices() / input.getNrOfSlices();
+
+        for (int filterSlice = 0; filterSlice < filter.getNrOfSlices(); ++filterSlice) {
+            int inputSlice = filterSlice / filtersPerInputSlice;
+            for (int or = 0; or < output.getNrOfRows(); ++or) {
+                for (int oc = 0; oc < output.getNrOfColumns(); ++oc) {
+                    float c = convolveSingle(or, oc, filterSlice, input, inputSlice, zeroPadding, filter, stride);
+                    output.set(or, oc, filterSlice, c + bias.get(filterSlice, 0));
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates the deltas for the batch convolution process.
+     *
+     * @param input the input (with batch multiplicity).
+     * @param deltas the deltas( with batch multiplicity).
+     * @param stride the stride.
+     * @param kernel the kernel (with batch multiplicity).
+     */
+    @Override
+    public void deltasBatchConvolve(imatrix input, imatrix deltas, int stride, imatrix kernel) {
+        int filtersPerInputSlice = deltas.getNrOfSlices() / input.getNrOfSlices();
+        int zeroPadding = input.getZeroPadding();
+        for (int h = 0; h < kernel.getNrOfHyperSlices(); ++h) {
+            for (int fs = 0; fs < deltas.getNrOfSlices(); ++fs) {
+                int inputSlice = fs / filtersPerInputSlice;
+                for (int or = 0; or < kernel.getNrOfRows(); ++or) {
+                    for (int oc = 0; oc < kernel.getNrOfColumns(); ++oc) {
+                        float c = convolveSingle(or, oc, fs, input, inputSlice, zeroPadding, deltas, h, stride);
+                        kernel.set(or, oc, fs, h, c);
+                    }
                 }
             }
         }
@@ -348,6 +402,37 @@ public class FMatrixOpCpu implements FMatrixOp {
                 if (ir >= 0 && ic >= 0 && ir < input.getNrOfRows() && ic < input.getNrOfColumns()) {
                     float iv = input.get(ir, ic, inputSlice);
                     float fv = filter.get(fr, fc, filterSlice);
+                    c += iv * fv;
+                }
+            }
+        }
+        return c;
+    }
+
+    /**
+     * Performs the convolution for a single cell in the output with a filter
+     * that has batches.
+     *
+     * @param or the current row of the output.
+     * @param oc the current column of the output.
+     * @param input the input matrix.
+     * @param filter the filter.
+     * @param h the hyperslice of the filter.
+     * @param stride the stride of the convolution window.
+     * @return
+     */
+    private float convolveSingle(int or, int oc, int filterSlice, imatrix input, int inputSlice, int zeroPadding, imatrix filter, int h, int stride) {
+        int irb = or * stride;
+        int irc = oc * stride;
+
+        float c = 0;
+        for (int fr = 0; fr < filter.getNrOfRows(); ++fr) {
+            for (int fc = 0; fc < filter.getNrOfColumns(); ++fc) {
+                int ir = irb + fr - zeroPadding;
+                int ic = irc + fc - zeroPadding;
+                if (ir >= 0 && ic >= 0 && ir < input.getNrOfRows() && ic < input.getNrOfColumns()) {
+                    float iv = input.get(ir, ic, inputSlice, h);
+                    float fv = filter.get(fr, fc, filterSlice, h);
                     c += iv * fv;
                 }
             }
@@ -845,7 +930,7 @@ public class FMatrixOpCpu implements FMatrixOp {
 
                     float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
                     float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
-                    output.set(y, x, oSlice, Math.abs(norm) < 0.00001f ? value : value / norm);
+                    output.set(x, y, oSlice, Math.abs(norm) < 0.00001f ? value : value / norm);
                 }
             }
         }
@@ -877,16 +962,18 @@ public class FMatrixOpCpu implements FMatrixOp {
         float2 mask = new float2();
 
         for (int oSlice = 0; oSlice < kernelOutput.getNrOfSlices(); ++oSlice) {
-            for (int rot = 0; rot < nrOfRotations; ++rot) {
-                int inputSlice = oSlice * nrOfRotations + rot;
 
-                float sa = (float) sincos.get(0, rot);
-                float ca = (float) sincos.get(1, rot);
-                float rcx = kernelOutput.getNrOfColumns() / 2.0f;
-                float rcy = kernelOutput.getNrOfRows() / 2.0f;
+            float rcx = kernelOutput.getNrOfRows() / 2.0f;
+            float rcy = kernelOutput.getNrOfColumns() / 2.0f;
 
-                for (int x = 0; x < kernelOutput.getNrOfColumns(); ++x) {
-                    for (int y = 0; y < kernelOutput.getNrOfRows(); ++y) {
+            for (int x = 0; x < kernelOutput.getNrOfRows(); ++x) {
+                for (int y = 0; y < kernelOutput.getNrOfColumns(); ++y) {
+                    float sum = 0;
+                    for (int rot = 0; rot < nrOfRotations; ++rot) {
+                        int inputSlice = oSlice * nrOfRotations + rot;
+
+                        float sa = (float) sincos.get(0, rot);
+                        float ca = (float) sincos.get(1, rot);
                         float rx = x - rcx;
                         float ry = y - rcy;
 
@@ -919,10 +1006,9 @@ public class FMatrixOpCpu implements FMatrixOp {
                         float norm = a1 * m1 + a2 * m2 + a3 * m3 + a4 * m4;
                         float value = a1 * i1 + a2 * i2 + a3 * i3 + a4 * i4;
 
-                        float result = Math.abs(norm) < 0.00001f ? value : value / norm;
-                        float current = kernelOutput.get(y, x, oSlice);
-                        kernelOutput.set(y, x, oSlice, current + result);
+                        sum += Math.abs(norm) < 0.00001f ? value : value / norm;
                     }
+                    kernelOutput.set(x, y, oSlice, sum / nrOfRotations);
                 }
             }
         }
@@ -1011,8 +1097,8 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     private void getKernelValue(imatrix filter, int x, int y, int slice, float2 result) {
-        if (x >= 0 && y >= 0 && x < filter.getNrOfColumns() && y < filter.getNrOfRows()) {
-            result.x = filter.get(y, x, slice);
+        if (x >= 0 && y >= 0 && x < filter.getNrOfRows() && y < filter.getNrOfColumns()) {
+            result.x = filter.get(x, y, slice);
             result.y = 1;
         } else {
             result.x = 0;
@@ -1025,31 +1111,126 @@ public class FMatrixOpCpu implements FMatrixOp {
      *
      * @param input the input matrix.
      * @param slicesPerGroup the number of slices per group.
-     * @param biases the nr of biases.
-     * @param weights the weight matrix.
      * @param output the output matrix.
+     *
+     * @param weights the weights for the linear combination of the input
+     * slices.
+     * @param bias the bias per output slice, the number of slices must be equal
+     * to the slices in the output.
      */
     @Override
-    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output) {
+    public void forwardPancake(imatrix input, int slicesPerGroup, imatrix weights, imatrix bias, imatrix output) {
 
         for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
             for (int s = 0; s < output.getNrOfSlices(); ++s) {
                 int baseInputSlice = s * slicesPerGroup;
-                int baseWeightSlice = s * (slicesPerGroup + biases);
 
                 for (int c = 0; c < output.getNrOfColumns(); ++c) {
                     for (int r = 0; r < output.getNrOfRows(); ++r) {
                         float sum = 0;
                         for (int sg = 0; sg < slicesPerGroup; ++sg) {
                             float val = input.get(r, c, baseInputSlice + sg, h);
-                            float w = weights.get(r, c, baseWeightSlice + sg, h);
+                            float w = weights.get(r, c, baseInputSlice + sg);
                             sum += val * w;
                         }
-                        for (int b = 0; b < biases; ++b) {
-                            float w = weights.get(r, c, baseWeightSlice + slicesPerGroup + b, h);
-                            sum += w;
-                        }
+
+                        float w = bias.get(r, c, s);
+                        sum += w;
+
                         output.set(r, c, s, h, sum);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates the deltas for the weights of the pancake layer. First the
+     * deltas will be calculated in batch, after that the acumulation of the sum
+     * will be made.
+     *
+     * @param input the current input of the pancake layer.
+     * @param deltas the current deltas back propagated into the pancake layer.
+     * @param slicesPerGroup the number of slices per pancakge group.
+     * @param weightDeltasBatch the batch deltas for the weights in the layer.
+     * @param biasDeltasBatch the bias deltas.
+     */
+    @Override
+    public void deltasPancake(imatrix input, imatrix deltas, int slicesPerGroup, imatrix weightDeltasBatch, imatrix biasDeltasBatch) {
+        for (int h = 0; h < weightDeltasBatch.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < weightDeltasBatch.getNrOfSlices(); ++s) {
+                int oSlice = s / slicesPerGroup;
+                // weight batch update.
+                for (int r = 0; r < weightDeltasBatch.getNrOfRows(); ++r) {
+                    for (int c = 0; c < weightDeltasBatch.getNrOfColumns(); ++c) {
+                        float i = input.get(r, c, s, h);
+                        float d = deltas.get(r, c, oSlice, h);
+                        weightDeltasBatch.set(r, c, s, h, i * d);
+                    }
+                }
+            }
+            // bias batch update.
+            for (int s = 0; s < biasDeltasBatch.getNrOfSlices(); ++s) {
+                for (int r = 0; r < biasDeltasBatch.getNrOfRows(); ++r) {
+                    for (int c = 0; c < biasDeltasBatch.getNrOfColumns(); ++c) {
+                        float d = deltas.get(r, c, s, h);
+                        biasDeltasBatch.set(r, c, s, h, d);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates the linear combination of all the cells with the same row,
+     * column and slice index. For example if the number of hyperslices is 3,
+     * then a vector with the linear combination factor can be set as [0.5, 0.2,
+     * 2.0] and all the corresponding cells will be linearly combined as:
+     *
+     * 0.5 * c_h1 + 0.2 * c_h2 + 2.0 * h3.
+     *
+     * @param input the input matrix, typically with a batch size bigger than
+     * one.
+     * @param lcVector the vector with the linear combination, the number of
+     * rows must be equal to the batch size.
+     * @param output the output matrix, with the number of rows, columns and
+     * slices equal to the input matrix, but a batch size of one.
+     */
+    @Override
+    public void batchLC(imatrix input, imatrix lcVector, imatrix output) {
+        for (int h = 0; h < input.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < input.getNrOfSlices(); ++s) {
+                for (int c = 0; c < input.getNrOfColumns(); ++c) {
+                    for (int r = 0; r < input.getNrOfRows(); ++r) {
+                        float cellValue = input.get(r, c, s, h);
+                        float factor = lcVector.get(h, 0);
+                        float current = output.get(r, c, s);
+                        output.set(r, c, s, current + cellValue * factor);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates the backpropagation of the pancake layer.
+     *
+     * @param deltas the deltas of the next layer.
+     * @param weights the current weights of this layer.
+     * @param slicesPerGroup the slices per group.
+     * @param output the error output of the backpropagation.
+     */
+    @Override
+    public void backpropPancake(imatrix deltas, imatrix weights, int slicesPerGroup, imatrix output) {
+        for (int h = 0; h < output.getNrOfHyperSlices(); ++h) {
+            for (int s = 0; s < output.getNrOfSlices(); ++s) {
+                int deltaSlice = s / slicesPerGroup;
+
+                for (int c = 0; c < output.getNrOfColumns(); ++c) {
+                    for (int r = 0; r < output.getNrOfRows(); ++r) {
+                        float od = deltas.get(r, c, deltaSlice, h);
+                        float w = weights.get(r, c, s);
+                        output.set(r, c, s, h, od * w);
                     }
                 }
             }
@@ -1163,6 +1344,49 @@ public class FMatrixOpCpu implements FMatrixOp {
     }
 
     /**
+     * Interleaved copy of the slices of the src matrices into the destination
+     * matrix. The slice size of all the src matrices has to be the same.
+     *
+     * @param srcMatrices the list of source matrices.
+     * @param dest the destination matrix.
+     */
+    @Override
+    public void zip(List<imatrix> srcMatrices, imatrix dest) {
+        int hSlices = dest.getNrOfHyperSlices();
+        int rows = dest.getNrOfRows();
+        int columns = dest.getNrOfColumns();
+        int slices = Integer.MAX_VALUE;
+        for (imatrix im : srcMatrices) {
+            if (im.getNrOfHyperSlices() < hSlices) {
+                hSlices = im.getNrOfHyperSlices();
+            }
+            if (im.getNrOfRows() < rows) {
+                rows = im.getNrOfRows();
+            }
+            if (im.getNrOfColumns() < columns) {
+                columns = im.getNrOfColumns();
+            }
+            if (im.getNrOfSlices() < slices) {
+                slices = im.getNrOfSlices();
+            }
+        }
+
+        for (int mi = 0; mi < srcMatrices.size(); ++mi) {
+            imatrix current = srcMatrices.get(mi);
+            for (int h = 0; h < hSlices; ++h) {
+                for (int s = 0; s < slices; ++s) {
+                    for (int r = 0; r < rows; ++r) {
+                        for (int c = 0; c < columns; ++c) {
+                            float value = current.get(r, c, s, h);
+                            dest.set(r, c, s * slices + mi, h, value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Unzips the src matrix into two destination matrices per slice. The even
      * slices will be copied into the first destination matrix, the uneven
      * slices will be copied into the second destination matrix.
@@ -1192,8 +1416,70 @@ public class FMatrixOpCpu implements FMatrixOp {
         }
     }
 
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The slices
+     * will be distributed over the destination matrices.
+     *
+     * @param src the source matrix.
+     * @param dstMatrices the list of matrix to unzip the errors into.
+     */
+    @Override
+    public void unzip(imatrix src, List<imatrix> dstMatrices) {
+        int hSlices = src.getNrOfHyperSlices();
+        int rows = src.getNrOfRows();
+        int columns = src.getNrOfColumns();
+        int slices = Integer.MAX_VALUE;
+        for (imatrix im : dstMatrices) {
+            if (im.getNrOfHyperSlices() < hSlices) {
+                hSlices = im.getNrOfHyperSlices();
+            }
+            if (im.getNrOfRows() < rows) {
+                rows = im.getNrOfRows();
+            }
+            if (im.getNrOfColumns() < columns) {
+                columns = im.getNrOfColumns();
+            }
+            if (im.getNrOfSlices() < slices) {
+                slices = im.getNrOfSlices();
+            }
+        }
+
+        int sMul = dstMatrices.size();
+        for (int dm = 0; dm < dstMatrices.size(); ++dm) {
+            imatrix current = dstMatrices.get(dm);
+            for (int h = 0; h < hSlices; ++h) {
+                for (int s = 0; s < slices; ++s) {
+                    for (int r = 0; r < src.getNrOfRows(); ++r) {
+                        for (int c = 0; c < src.getNrOfColumns(); ++c) {
+                            float v = src.get(r, c, s * sMul + dm, h);
+                            current.set(r, c, s, h, v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Override
     public void reset(fmatrix m) {
         m.applyFunction(x -> 0);
+    }
+
+    @Override
+    public void sumPerSlice(imatrix src, imatrix dst) {
+        FloatBuffer fb = src.getHostData();
+        for (int h = 0; h < src.getNrOfHyperSlices(); ++h) {
+            int hOffset = src.getHyperSliceSize() * h;
+            for (int s = 0; s < src.getNrOfSlices(); ++s) {
+                int sOffset = src.getSliceSize() * s;
+                float sum = 0;
+                for (int i = 0; i < src.getSliceSize(); ++i) {
+                    float val = fb.get(hOffset + sOffset + i);
+                    sum += val;
+                }
+                dst.set(s, 0, 0, h, sum);
+            }
+
+        }
     }
 }

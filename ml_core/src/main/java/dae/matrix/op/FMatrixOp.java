@@ -8,6 +8,8 @@ import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import dae.neuralnet.activation.ActivationFunction;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -47,6 +49,29 @@ public interface FMatrixOp {
      * @param output the matrix where the output is stored.
      */
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output);
+    
+    /**
+     *  Applies a convolution filter on the input matrix, with the slices taken
+     * into account. A bias term will be added to each output cell as defined in
+     * the bias matrix which contains the bias terms in rows.
+     * 
+     * @param input the matrix to convolve.
+     * @param filter  the filter to apply.
+     * @param bias a row matrix with a bias term per filter slice.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    public void batchConvolve(imatrix input, imatrix filter, imatrix bias, int stride, imatrix output);
+    
+    /**
+     * Calculates the deltas for the batch convolution process.
+     * 
+     * @param input the input (with batch multiplicity).
+     * @param deltas the deltas( with batch multiplicity).
+     * @param stride the stride.
+     * @param kernel the kernel (with batch multiplicity).
+     */
+    public void deltasBatchConvolve(imatrix input, imatrix deltas, int stride, imatrix kernel);
 
     /**
      * Applies a correlation filter on the input matrix, with the slices taken
@@ -434,12 +459,76 @@ public interface FMatrixOp {
 
     /**
      * Condense slices into one output with optional biases.
+     *
      * @param input the input matrix.
      * @param slicesPerGroup the number of slices per group.
-     * @param biases the nr of biases.
-     * @param weights the weight matrix.
      * @param output the output matrix.
+     *
+     * @param weights the weights for the linear combination of the input
+     * slices.
+     * @param bias the bias per output slice, the number of slices must be equal
+     * to the slices in the output.
      */
-    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output);
+    public void forwardPancake(imatrix input, int slicesPerGroup, imatrix weights, imatrix bias, imatrix output);
 
+    /**
+     * Calculates the deltas for the weights of the pancake layer. First the
+     * deltas will be calculated in batch, after that the acumulation of the sum
+     * will be made.
+     *
+     * @param input the current input of the pancake layer.
+     * @param deltas the current deltas back propagated into the pancake layer.
+     * @param slicesPerGroup the number of slices per pancakge group.
+     * @param weightDeltas the batch deltas for the weights in the layer.
+     * @param biasDeltas the bias deltas.
+     */
+    public void deltasPancake(imatrix input, imatrix deltas, int slicesPerGroup, imatrix weightDeltas, imatrix biasDeltas);
+
+    /**
+     * Calculates the linear combination of all the cells with the same row,
+     * column and slice index. For example if the number of hyperslices is 3,
+     * then a vector with the linear combination factor can be set as [0.5, 0.2,
+     * 2.0] and all the corresponding cells will be linearly combined as:
+     *
+     * 0.5 * c_h1 + 0.2 * c_h2 + 2.0 * h3.
+     *
+     * @param input the input matrix, typically with a batch size bigger than
+     * one.
+     * @param lcVector the vector with the linear combination, the number of
+     * rows must be equal to the batch size.
+     * @param output the output matrix, with the number of rows, columns and
+     * slices equal to the input matrix, but a batch size of one.
+     */
+    public void batchLC(imatrix input, imatrix lcVector, imatrix output);
+
+    /**
+     * Calculates the backpropagation of the pancake layer.
+     *
+     * @param deltas the deltas of the next layer.
+     * @param weights the current weights of this layer.
+     * @param slicesPerGroup the slices per group.
+     * @param output the error output of the backpropagation.
+     */
+    public void backpropPancake(imatrix deltas, imatrix weights, int slicesPerGroup, imatrix output);
+
+    public void sumPerSlice(imatrix src, imatrix dst);
+
+     /**
+     * Interleaved copy of the slices of the src matrices into
+     * the destination matrix. The slice size of all the src matrices
+     * has to be the same.
+     *
+     * @param srcMatrices the list of source matrices.
+     * @param dest the destination matrix.
+     */
+    public void zip(List<imatrix> srcMatrices, imatrix dest);
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The slices
+     * will be distributed over the destination matrices.
+     *
+     * @param src the source matrix.
+     * @param dst the list of matrix to unzip the errors into.
+     */
+    public void unzip(imatrix src, List<imatrix> dst);
 }

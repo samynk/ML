@@ -16,8 +16,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static dae.matrix.gpu.MatrixTestUtil.*;
+import dae.matrix.imatrix;
 import dae.neuralnet.activation.ActivationFunction;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -180,6 +183,11 @@ public class FMatrixOpTest {
 //        System.out.println("output2");
 //        System.out.println(output2);
         assertMatrixEquals(output1, output2);
+    }
+
+    @Test
+    public void testDeltaBatchConvolution() {
+
     }
 
     @Test
@@ -668,7 +676,7 @@ public class FMatrixOpTest {
 
         fmatrix kernel = new fmatrix(49, 49, 28);
         kernel.randomize(-1, 1);
-        fmatrix.writeAs3DImage(kernel, 4, 10, Paths.get("startRotation"));
+        fmatrix.writeAs3DImage(kernel, 4, 10, Paths.get("accStartRotation"));
 
         fmatrix outputGpu = new fmatrix(49, 49, 4);
         fmatrix outputCpu = new fmatrix(49, 49, 4);
@@ -676,8 +684,8 @@ public class FMatrixOpTest {
         cpu.accumulateRotateKernels(kernel, 7, 0, (float) (Math.PI - Math.PI / 8.0), outputCpu);
 
         outputGpu.sync();
-        fmatrix.writeAs3DImage(outputCpu, 7, 10, Paths.get("rotationCpu"));
-        fmatrix.writeAs3DImage(outputGpu, 7, 10, Paths.get("rotationGpu"));
+        fmatrix.writeAs3DImage(outputCpu, 7, 10, Paths.get("accRotationCpu"));
+        fmatrix.writeAs3DImage(outputGpu, 7, 10, Paths.get("accRotationGpu"));
 
         assertMatrixEquals(outputCpu, outputGpu);
 
@@ -723,37 +731,85 @@ public class FMatrixOpTest {
 
     @Test
     public void testZip() {
-        fmatrix input1 = new fmatrix(14, 14, 24, 100);
-        input1.randomize(-1, 1);
+        int batchSize = 60;
+        int startSlices = 32;
+        for (int i = 0; i < 5; ++i) {
+            fmatrix input1 = new fmatrix(14, 14, startSlices, batchSize);
+            input1.randomize(-1, 1);
 
-        fmatrix input2 = new fmatrix(14, 14, 24, 100);
-        input2.randomize(-1, 1);
+            fmatrix input2 = new fmatrix(14, 14, startSlices, batchSize);
+            input2.randomize(-1, 1);
 
-        fmatrix gpuDest = new fmatrix(14, 14, 48, 100);
-        fmatrix cpuDest = new fmatrix(14, 14, 48, 100);
-        gpu.zip(input1, input2, gpuDest);
-        cpu.zip(input1, input2, cpuDest);
+            fmatrix gpuDest = new fmatrix(14, 14, startSlices * 2, batchSize);
+            fmatrix cpuDest = new fmatrix(14, 14, startSlices * 2, batchSize);
+            gpu.zip(input1, input2, gpuDest);
+            cpu.zip(input1, input2, cpuDest);
 
-        gpuDest.sync();
+            gpuDest.sync();
 
-        assertMatrixEquals(gpuDest, cpuDest);
+            assertMatrixEquals(gpuDest, cpuDest);
 
-        fmatrix cpuInput1 = new fmatrix(14, 14, 24, 100);
-        fmatrix cpuInput2 = new fmatrix(14, 14, 24, 100);
-        cpu.unzip(cpuDest, cpuInput1, cpuInput2);
+            fmatrix cpuInput1 = new fmatrix(14, 14, startSlices, batchSize);
+            fmatrix cpuInput2 = new fmatrix(14, 14, startSlices, batchSize);
+            cpu.unzip(cpuDest, cpuInput1, cpuInput2);
 
-        fmatrix gpuInput1 = new fmatrix(14, 14, 24, 100);
-        fmatrix gpuInput2 = new fmatrix(14, 14, 24, 100);
-        gpu.unzip(gpuDest, gpuInput1, gpuInput2);
+            fmatrix gpuInput1 = new fmatrix(14, 14, startSlices, batchSize);
+            fmatrix gpuInput2 = new fmatrix(14, 14, startSlices, batchSize);
+            gpu.unzip(gpuDest, gpuInput1, gpuInput2);
 
-        assertMatrixEquals(input1, cpuInput1);
-        assertMatrixEquals(input2, cpuInput2);
+            assertMatrixEquals(input1, cpuInput1);
+            assertMatrixEquals(input2, cpuInput2);
 
-        gpuInput1.sync();
-        gpuInput2.sync();
-        assertMatrixEquals(input1, gpuInput1);
-        assertMatrixEquals(input2, gpuInput2);
+            gpuInput1.sync();
+            gpuInput2.sync();
+            assertMatrixEquals(input1, gpuInput1);
+            assertMatrixEquals(input2, gpuInput2);
+        }
 
+    }
+    
+    @Test
+    public void testZip2(){
+        int numSrcs = 10;
+        int numRows = 5;
+        int numCols = 5;
+        int numSlices = 10;
+        int numHS = 100;
+        
+        List<imatrix> srcs = new ArrayList<>();
+        for(int i=0; i < numSrcs; ++i){
+            fmatrix src = new fmatrix(numRows, numCols, numSlices, numHS);
+            src.randomize(-1,1);
+            srcs.add(src);
+        }
+        
+        fmatrix destCPU = new fmatrix(numRows, numCols, numSlices * numSrcs, numHS);
+        fmatrix destGPU = new fmatrix(numRows, numCols, numSlices * numSrcs, numHS);
+        
+        cpu.zip(srcs, destCPU);
+        gpu.zip(srcs, destGPU);
+        
+        destGPU.sync();
+        assertMatrixEquals(destCPU, destGPU);
+        
+        List<imatrix> dstGPUs = new ArrayList<>();
+        List<imatrix> dstCPUs = new ArrayList<>();
+        for(int i=0; i < numSrcs; ++i){
+            fmatrix dstGPU = new fmatrix(numRows, numCols, numSlices, numHS);
+            dstGPUs.add(dstGPU);
+            fmatrix dstCPU = new fmatrix(numRows, numCols, numSlices, numHS);
+            dstCPUs.add(dstCPU);
+        }
+        
+        cpu.unzip(destCPU, dstCPUs);
+        cpu.unzip(destGPU, dstGPUs);
+        
+        for(int i =0 ; i < numSrcs; ++i){
+            imatrix currentGPU = dstGPUs.get(i);
+            currentGPU.sync();
+            imatrix currentCPU = dstCPUs.get(i);
+            assertMatrixEquals(currentCPU, currentGPU);
+        }
     }
 
     @Test
@@ -790,27 +846,159 @@ public class FMatrixOpTest {
         gpuBP.sync();
         assertMatrixEquals(cpuBP, gpuBP);
     }
-    
-    @Test 
-    public void testPancake(){
+
+    @Test
+    public void testPancake() {
         int rows = 20;
         int columns = 20;
         int slices = 20;
         int batchSize = 50;
-        
+
         int slicesPerGroup = 4;
-        int biases = 1;
-        
-        fmatrix input = new fmatrix(rows,columns,slices, batchSize);
-        int weightSlices = slicesPerGroup*(biases+slices / slicesPerGroup);
-        fmatrix weights = new fmatrix(rows, columns, weightSlices, batchSize);
-        
-        fmatrix outputGPU = new fmatrix(rows, columns, slices/slicesPerGroup, batchSize);
-        fmatrix outputCPU = new fmatrix(rows, columns, slices/slicesPerGroup, batchSize);
-        
-        cpu.forwardPancake(input, slicesPerGroup, biases, weights, outputCPU);
-        gpu.forwardPancake(input, slicesPerGroup, biases, weights, outputGPU);
-        
+        fmatrix input = new fmatrix(rows, columns, slices, batchSize);
+        input.randomize(-1, 1);
+        int weightSlices = slices;
+        fmatrix weights = new fmatrix(rows, columns, weightSlices, 1);
+        weights.randomize(-1, 1);
+
+        fmatrix outputGPU = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+        fmatrix outputCPU = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+
+        fmatrix bias = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+        bias.randomize(-1, 1);
+
+        cpu.forwardPancake(input, slicesPerGroup, weights, bias, outputCPU);
+        gpu.forwardPancake(input, slicesPerGroup, weights, bias, outputGPU);
+
+        outputGPU.sync();
+        assertMatrixEquals(outputCPU, outputGPU);
+
+        fmatrix deltas = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+        deltas.randomize(-1, 1);
+
+        fmatrix weightDeltasCPUBatch = new fmatrix(rows, columns, weightSlices, batchSize);
+        fmatrix weightDeltasGPUBatch = new fmatrix(rows, columns, weightSlices, batchSize);
+
+        fmatrix biasDeltasCPUBatch = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+        fmatrix biasDeltasGPUBatch = new fmatrix(rows, columns, slices / slicesPerGroup, batchSize);
+
+        gpu.deltasPancake(input, deltas, slicesPerGroup, weightDeltasGPUBatch, biasDeltasGPUBatch);
+        cpu.deltasPancake(input, deltas, slicesPerGroup, weightDeltasCPUBatch, biasDeltasCPUBatch);
+
+        weightDeltasGPUBatch.sync();
+        biasDeltasGPUBatch.sync();
+
+        assertMatrixEquals(weightDeltasCPUBatch, weightDeltasGPUBatch);
+        assertMatrixEquals(biasDeltasCPUBatch, biasDeltasGPUBatch);
+
+        fmatrix weightDeltasCPU = new fmatrix(rows, columns, weightSlices, 1);
+        fmatrix weightDeltasGPU = new fmatrix(rows, columns, weightSlices, 1);
+
+        fmatrix biasDeltasCPU = new fmatrix(rows, columns, slices / slicesPerGroup, 1);
+        fmatrix biasDeltasGPU = new fmatrix(rows, columns, slices / slicesPerGroup, 1);
+
+        fmatrix lcVectorWeights = new fmatrix(rows, columns, weightSlices);
+        lcVectorWeights.applyFunction(x -> 1);
+        fmatrix lcVectorBias = new fmatrix(rows, columns, slices / slicesPerGroup);
+        lcVectorBias.applyFunction(x -> 1);
+
+        cpu.batchLC(weightDeltasCPUBatch, lcVectorWeights, weightDeltasCPU);
+        gpu.batchLC(weightDeltasGPUBatch, lcVectorWeights, weightDeltasGPU);
+
+        weightDeltasGPU.sync();
+        assertMatrixEquals(weightDeltasCPU, weightDeltasGPU);
+
+        cpu.batchLC(biasDeltasCPUBatch, lcVectorBias, biasDeltasCPU);
+        gpu.batchLC(biasDeltasGPUBatch, lcVectorBias, biasDeltasGPU);
+
+        biasDeltasGPU.sync();
+        assertMatrixEquals(biasDeltasCPU, biasDeltasGPU);
+
+        fmatrix inputCPU = new fmatrix(rows, columns, slices, batchSize);
+        fmatrix inputGPU = new fmatrix(rows, columns, slices, batchSize);
+        cpu.backpropPancake(outputCPU, weights, slicesPerGroup, inputCPU);
+        gpu.backpropPancake(outputGPU, weights, slicesPerGroup, inputGPU);
+
+        inputGPU.sync();
+        assertMatrixEquals(inputCPU, inputGPU);
+    }
+
+    @Test
+    public void testSumPerSlice() {
+        int rows = 30;
+        int columns = 40;
+
+        int slices = 10;
+        int hyperSlices = 100;
+
+        fmatrix input = new fmatrix(rows, columns, slices, hyperSlices);
+        input.randomize(-10, 10);
+
+        fmatrix destGPU = new fmatrix(slices, 1, 1, hyperSlices);
+        fmatrix destCPU = new fmatrix(slices, 1, 1, hyperSlices);
+
+        gpu.sumPerSlice(input, destGPU);
+        cpu.sumPerSlice(input, destCPU);
+
+        destGPU.sync();
+        assertMatrixEquals(destCPU, destGPU);
+    }
+
+    @Test
+    public void testConvolvBatchBias() {
+        int rows = 30;
+        int columns = 30;
+
+        int slices = 3;
+        int hyperSlices = 100;
+
+        fmatrix input = new fmatrix(rows, columns, slices, hyperSlices);
+        input.randomize(-5, 5);
+
+        int nrOfFilters = 3;
+        int K = 5;
+        int S = 1;
+        int P = (K - 1) / 2;
+
+        int nzpRows = 6;
+        int nzpCols = 6;
+
+        fmatrix filter = new fmatrix(K, K, nrOfFilters);
+        fmatrix bias = new fmatrix(nrOfFilters, 1, 1);
+        bias.randomize(-1, 1);
+        filter.randomize(-1, 1);
+
+        int O_Col = 1 + (nzpCols - K + 2 * P) / S;
+        int O_Row = 1 + (nzpRows - K + 2 * P) / S;
+
+        fmatrix outputGPU = new fmatrix(O_Row, O_Col, nrOfFilters * slices);
+        fmatrix outputCPU = new fmatrix(O_Row, O_Col, nrOfFilters * slices);
+
+        gpu.batchConvolve(input, filter, bias, 1, outputGPU);
+        cpu.batchConvolve(input, filter, bias, 1, outputCPU);
+
+        outputGPU.sync();
+        assertMatrixEquals(outputCPU, outputGPU);
+    }
+
+    @Test
+    public void testConvolvBatchDeltas() {
+        int rows = 14;
+        int columns = 14;
+
+        int slices = 8;
+        int hyperSlices = 100;
+
+        fmatrix input = new fmatrix(rows, columns, slices, hyperSlices, 2);
+        input.randomize(-5, 5);
+
+        fmatrix deltas = new fmatrix(rows, columns, 256, hyperSlices);
+        fmatrix outputGPU = new fmatrix(5, 5, 256, hyperSlices);
+        fmatrix outputCPU = new fmatrix(5, 5, 256, hyperSlices);
+
+        cpu.deltasBatchConvolve(input, deltas, 1, outputCPU);
+        gpu.deltasBatchConvolve(input, deltas, 1, outputGPU);
+
         outputGPU.sync();
         assertMatrixEquals(outputCPU, outputGPU);
     }

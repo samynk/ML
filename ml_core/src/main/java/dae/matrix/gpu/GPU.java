@@ -8,6 +8,8 @@ import dae.matrix.imatrix;
 import dae.matrix.integer.intmatrix;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -71,7 +73,7 @@ public class GPU {
         // Obtain a platform ID
         cl_platform_id platforms[] = new cl_platform_id[numPlatforms];
         clGetPlatformIDs(platforms.length, platforms, null);
-        cl_platform_id platform = platforms[platformIndex];
+        cl_platform_id platform = platforms[platforms.length - 1];
 
         // Initialize the context properties
         cl_context_properties contextProperties = new cl_context_properties();
@@ -245,8 +247,8 @@ public class GPU {
                 mdb.getDeviceOffset(),
                 mdb.getHostOffset(),
                 mdb.getHostRegion(),
-                mdb.getDeviceRowPitch(),mdb.getDeviceSlicePitch(),
-                mdb.getHostRowPitch(),mdb.getHostSlicePitch(),
+                mdb.getDeviceRowPitch(), mdb.getDeviceSlicePitch(),
+                mdb.getHostRowPitch(), mdb.getHostSlicePitch(),
                 mdb.getCLPointer(),
                 0,
                 null,
@@ -526,6 +528,61 @@ public class GPU {
         dbDst.markGpuAsMaster();
     }
 
+    public static void zip(List<imatrix> srcMatrices, imatrix dest) {
+        int hSlices = dest.getNrOfHyperSlices();
+        int rows = dest.getNrOfRows();
+        int columns = dest.getNrOfColumns();
+        int slices = Integer.MAX_VALUE;
+        for (imatrix im : srcMatrices) {
+            if (im.getNrOfHyperSlices() < hSlices) {
+                hSlices = im.getNrOfHyperSlices();
+            }
+            if (im.getNrOfRows() < rows) {
+                rows = im.getNrOfRows();
+            }
+            if (im.getNrOfColumns() < columns) {
+                columns = im.getNrOfColumns();
+            }
+            if (im.getNrOfSlices() < slices) {
+                slices = im.getNrOfSlices();
+            }
+        }
+
+        FloatDeviceBuffer dbDst = dest.getDeviceBuffer();
+        long region[] = new long[3];
+        long[] dstOffset = dbDst.getDeviceOffset();
+        long[] eOffset = new long[3];
+
+        eOffset[0] = dstOffset[0];
+        eOffset[1] = dstOffset[1];
+        eOffset[2] = dstOffset[2];
+
+        int destSlicePitch = dest.getSliceSize() * Sizeof.cl_float;
+        for (int mi = 0; mi < srcMatrices.size(); ++mi) {
+            imatrix current = srcMatrices.get(mi);
+
+            FloatDeviceBuffer dbSrc = current.getDeviceBuffer();
+            dbSrc.upload();
+            int slicePitch = current.getSliceSize() * Sizeof.cl_float;
+            region[0] = slicePitch;
+            region[1] = hSlices * slices;
+            region[2] = 1;
+
+            clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                    dbSrc.getMem(),
+                    dbDst.getMem(),
+                    dbSrc.getDeviceOffset(),
+                    eOffset,
+                    region,
+                    slicePitch, 0,
+                    destSlicePitch, 0,
+                    0, null, null);
+
+            eOffset[0] += slicePitch;
+        }
+        dbDst.markGpuAsMaster();
+    }
+
     /**
      * Unzips the src matrix into two destination matrices per slice. The even
      * slices will be copied into the first destination matrix, the uneven
@@ -585,6 +642,71 @@ public class GPU {
                 0, null, null);
         dbDest1.markGpuAsMaster();
         dbDest2.markGpuAsMaster();
+    }
+
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The slices
+     * will be distributed over the destination matrices.
+     *
+     * @param src the source matrix.
+     * @param dst the list of matrix to unzip the errors into.
+     */
+    static void unzip(imatrix src, List<imatrix> dstMatrices) {
+        int hSlices = src.getNrOfHyperSlices();
+        int rows = src.getNrOfRows();
+        int columns = src.getNrOfColumns();
+        int slices = Integer.MAX_VALUE;
+        for (imatrix im : dstMatrices) {
+            if (im.getNrOfHyperSlices() < hSlices) {
+                hSlices = im.getNrOfHyperSlices();
+            }
+            if (im.getNrOfRows() < rows) {
+                rows = im.getNrOfRows();
+            }
+            if (im.getNrOfColumns() < columns) {
+                columns = im.getNrOfColumns();
+            }
+            if (im.getNrOfSlices() < slices) {
+                slices = im.getNrOfSlices();
+            }
+        }
+
+        FloatDeviceBuffer dbSrc = src.getDeviceBuffer();
+        dbSrc.upload();
+        long region[] = new long[3];
+
+        long[] dstOffset = dbSrc.getDeviceOffset();
+        long[] eOffset = new long[3];
+
+        eOffset[0] = dstOffset[0];
+        eOffset[1] = dstOffset[1];
+        eOffset[2] = dstOffset[2];
+
+        int srcSlicePitch = src.getSliceSize() * Sizeof.cl_float;
+
+        for (int mi = 0; mi < dstMatrices.size(); ++mi) {
+            imatrix current = dstMatrices.get(mi);
+
+            FloatDeviceBuffer dbDst = current.getDeviceBuffer();
+            int slicePitch = current.getSliceSize() * Sizeof.cl_float;
+
+            region[0] = slicePitch;
+            region[1] = slices * hSlices;
+            region[2] = 1;
+
+            clEnqueueCopyBufferRect(CL_COMMAND_QUEUE,
+                    dbSrc.getMem(),
+                    dbDst.getMem(),
+                    eOffset,
+                    dbDst.getDeviceOffset(),
+                    region,
+                    srcSlicePitch, 0,
+                    slicePitch, 0,
+                    0, null, null);
+            eOffset[0] += slicePitch;
+            dbDst.markGpuAsMaster();
+        }
+
     }
 
 }

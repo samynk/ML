@@ -1,5 +1,6 @@
 package dae.neuralnet;
 
+import dae.matrix.Dimension;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.tmatrix;
@@ -43,6 +44,9 @@ public class Layer extends AbstractLayer {
     private Random dropRandom;
     private imatrix dropWeightMatrix;
     private imatrix tDropWeightMatrix;
+
+    private Dimension inputDimension;
+    private Dimension outputDimension;
 
     /**
      * Creates a layer with a given number of inputs, biases and outputs.
@@ -118,12 +122,25 @@ public class Layer extends AbstractLayer {
     public Layer(int nrOfInputs, int nrOfBiases, int nrOfOutputs, int batchSize, ActivationFunction af, imatrix weights) {
         super(nrOfInputs, nrOfBiases, nrOfOutputs, batchSize, af);
         this.weights = weights;
-        
+
         gradientAlgorithm = new AdamGradientAlgorithm(weights);
 
         this.tweights = new tmatrix(weights);
         this.tdeltas = new tmatrix(deltas);
         this.deltaWeights = new fmatrix(nrOfInputs + nrOfBiases, nrOfOutputs);
+
+        inputDimension = new Dimension(nrOfInputs, 1, 1, batchSize);
+        outputDimension = new Dimension(nrOfOutputs, 1, 1, batchSize);
+    }
+
+    @Override
+    public Layer duplicate() {
+        fmatrix dupWeights = new fmatrix( this.weights.getNrOfRows(),
+            this.weights.getNrOfColumns(),
+            this.weights.getNrOfSlices(),
+            this.weights.getNrOfHyperSlices(),
+            this.weights.getZeroPadding());
+        return new Layer(getNrOfInputs(), getNrOfBiases(), getNrOfOutputs(), getBatchSize(), super.getActivationFunction(), dupWeights);
     }
 
     /**
@@ -142,6 +159,10 @@ public class Layer extends AbstractLayer {
 
     public boolean isDropRateSet() {
         return dropRateSet;
+    }
+
+    public void enableDropLayer(boolean enable) {
+        this.dropRateSet = enable;
     }
 
     public float getDropRate() {
@@ -185,6 +206,7 @@ public class Layer extends AbstractLayer {
         imatrix weightMatrix = tweights;
         if (dropRateSet) {
             this.constraint.applyFunction(x -> dropRandom.nextFloat() > dropRate ? 1 : 0);
+            constraint.makeMaster();
             fmatrix.dotmultiply(dropWeightMatrix, constraint, weights);
             weightMatrix = tDropWeightMatrix;
         }
@@ -241,7 +263,7 @@ public class Layer extends AbstractLayer {
      */
     @Override
     public void randomizeWeights(Random r, float min, float max) {
-        weights.applyFunction(x -> (float)r.nextGaussian() / 10.0f);
+        weights.applyFunction(x -> (float) r.nextGaussian() / 10.0f);
     }
 
     public void printInputs() {

@@ -54,8 +54,8 @@ public class DeepLayer {
                 int inputs = next.getNrOfInputs();
                 validNetwork = false;
                 throw new IllegalArgumentException("Error while constructing a DeepLayer object.\n"
-                        + "Outputs of layer " + layers[i].getName() + " do not match inputs of the next layer.\n" +
-                        "number of inputs :" + inputs +", outputs: " + outputs+ "\n" );
+                        + "Outputs of layer " + layers[i].getName() + " do not match inputs of the next layer.\n"
+                        + "number of inputs :" + inputs + ", outputs: " + outputs + "\n");
             }
         }
     }
@@ -203,17 +203,15 @@ public class DeepLayer {
             }
         }
 
-        //if (mode == TrainingMode.STOCHASTIC) {
-            for (int i = 0; i < layers.length; ++i) {
-                layers[i].adaptWeights(this.learningRate.getLearningRate(iteration));
-            }
-        //}
+        for (int i = 0; i < layers.length; ++i) {
+            layers[i].adaptWeights(this.learningRate.getLearningRate(iteration));
+        }
     }
 
     public void adaptWeights(int iteration, int batchSize) {
         float lr = this.learningRate.getLearningRate(iteration);
         for (int i = 0; i < layers.length; ++i) {
-            layers[i].adaptWeights(lr / batchSize);
+            layers[i].adaptWeights(lr);
         }
     }
 
@@ -228,17 +226,9 @@ public class DeepLayer {
         }
     }
 
-    public void writeOutputImages() {
-        int layerIndex = 1;
-        Calendar c = Calendar.getInstance();
-        int year = c.get(Calendar.YEAR);
-        int month = c.get(Calendar.MONTH);
-        int day = c.get(Calendar.DAY_OF_MONTH);
-        int hour = c.get(Calendar.HOUR_OF_DAY);
-        int mins = c.get(Calendar.MINUTE);
+    public void writeOutputImages(String outputFolder) {
         for (ILayer l : this.layers) {
-            l.writeOutputImage("output_" + year + "_" + month + "_" + day + "/" + hour + "_" + mins + "_" + layerIndex);
-            ++layerIndex;
+            l.writeOutputImage(outputFolder + "/" + l.getName());
         }
     }
 

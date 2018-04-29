@@ -306,6 +306,51 @@ public class intmatrix {
             return 0;
         }
     }
+    
+    /**
+     * Adds a value to the cell at [row,column, 0, 0]
+     * @param row the row index of the cell.
+     * @param column the column index of the cell.
+     * @param value the value to add.
+     */
+    public void add(int row, int column, int value){
+        int index = rcToIndex(row, column);
+        if (index < data.limit()) {
+            int val = data.get(index);
+            data.put(index, val+value);
+        }
+    }
+    
+     /**
+     * Adds a value to the cell at [row,column, 0, 0]
+     * @param row the row index of the cell.
+     * @param column the column index of the cell.
+     * @param slice the slice index of the cell.
+     * @param value the value to add.
+     */
+    public void add(int row, int column, int slice, int value){
+        int index = rcsToIndex(row, column, slice);
+        if (index < data.limit()) {
+            int val = data.get(index);
+            data.put(index, val+value);
+        }
+    }
+    
+    /**
+     * Adds a value to the cell at [row,column, 0, 0]
+     * @param row the row index of the cell.
+     * @param column the column index of the cell.
+     * @param slice the slice index of the cell.
+     * @param h the hyperslice index of the cell.
+     * @param value the value to add.
+     */
+    public void add(int row, int column, int slice, int h, int value){
+        int index = rcshToIndex(row, column, slice, h);
+        if (index < data.limit()) {
+            int val = data.get(index);
+            data.put(index, val+value);
+        }
+    }
 
     /**
      * Returns the number of rows.

@@ -90,7 +90,7 @@ public class TestTwoLayerDigitRecognition {
         dl.sync();
         dl.analyzeWeights();
         dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r,true);
  
     }
 }

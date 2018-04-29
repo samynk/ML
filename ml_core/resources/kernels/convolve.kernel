@@ -93,6 +93,85 @@ __kernel void batchConvolution(
     output[ index ] = sum;//rcsh.y;
 }
 
+/*
+iDim: x,y,z -> rowSize, sliceSize, hyperSliceSize
+fDim: x,y,  -> rowSize, columnSize
+oDim: x,y,z -> rowSize, sliceSize, hyperSliceSize
+filterPerInputSlice: how many filters are there per slice of the input.
+*/
+__kernel void deltasBatchConvolution(
+    const __global float* input,
+    const int3 iDim,
+    const __global float* filter,
+    const int3 fDim,    
+    __global float* output,
+    const int3 oDim,
+    const int fps,
+    const int stride,
+    const int maxOutputIndex
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
+    // rcsh.z contains the current filter nr.
+    int fSlice = rcsh.z;
+    int inputSlice = rcsh.z / fps;
+    
+    if( index < maxOutputIndex ){
+        float sum = 0;
+        int rows = fDim.x;
+        int cols = fDim.y / fDim.x;
+        for(int fRow = 0;  fRow < rows; ++fRow){
+            int inputRow = rcsh.x + fRow;   
+            for(int fCol = 0;fCol < cols; ++fCol){
+                int inputCol = rcsh.y + fCol;
+                int inputI = rcshToIndex( (int4)( inputRow, inputCol, inputSlice, rcsh.w ) , iDim);
+                int filterI = rcshToIndex( (int4) (fRow, fCol, fSlice,rcsh.w) , fDim );
+                sum += input[inputI] * filter[filterI];
+            }
+        }
+
+        output[ index ] = sum;
+    }
+}
+
+/*
+iDim: x,y,z -> rowSize, sliceSize, hyperSliceSize
+fDim: x,y,  -> rowSize, columnSize
+oDim: x,y,z -> rowSize, sliceSize, hyperSliceSize
+filterPerInputSlice: how many filters are there per slice of the input.
+*/
+__kernel void batchConvolutionBias(
+    const __global float* input,
+    const __global float* filter,
+    const __global float* bias, 
+    __global float* output,
+    const int3 iDim,
+    const int2 fDim,
+    const int3 oDim,
+    const int fps,
+    const int stride
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, oDim);
+    // rcsh.z contains the current filter nr.
+    int fSlice = rcsh.z;
+    int inputSlice = rcsh.z / fps;
+    
+    float sum = 0;
+    for(int fRow = 0;  fRow < fDim.x; ++fRow){
+        int inputRow = rcsh.x + fRow;   
+        for(int fCol = 0;fCol < fDim.y; ++fCol){
+            int inputCol = rcsh.y + fCol;
+            int inputI = rcshToIndex( (int4)( inputRow, inputCol, inputSlice, rcsh.w ) , iDim);
+            int filterI = rcsToIndex( (int3) (fRow, fCol, fSlice) , (int2)(fDim.x,fDim.x*fDim.y) );
+            sum += input[inputI] * filter[filterI];
+        }
+    }
+    output[ index ] = sum+bias[fSlice];//rcsh.y;
+}
+
 __kernel void batchCorrelate(
     const __global float* input,
     const __global float* filter,
@@ -172,7 +251,7 @@ __kernel void batchBackpropCorrelate(
 
 float2 getFilterValue( const __constant float* filter, int x, int y,int fSlice,  int2 fDim)
 {
-    int index = rcsToIndex((int3)(y, x, fSlice), fDim);
+    int index = rcsToIndex((int3)(x,y, fSlice), fDim);
     return x <fDim.x && y < fDim.y / fDim.x && x >=0 && y >=0 ? (float2 )( filter[index],1 ): (float2)(0,0);
 }
 
@@ -187,7 +266,7 @@ __kernel void rotateKernels(
 )
 {
     int index = get_global_id(0);
-    int2 filterSize=(int2)(fDim.y, fDim.x*fDim.y);
+    int2 filterSize=(int2)(fDim.x, fDim.x*fDim.y);
     int3 rcs = indexToRCS(index, filterSize );
     int nrOfRotations = fDim.z;
     // first slice is unrotated filter.
@@ -236,13 +315,13 @@ __kernel void rotateKernels(
     
     float renormSum = dot(a,mask);
     float div = fabs(renormSum) < 0.0001f? 1:renormSum;
-    output[rcsToIndex( (int3)(rcs.y,rcs.x,slice), filterSize)] = dot(i,a) / div; 
+    output[index] = dot(i,a) / div; 
 }
 
 float2 getRotatedValue( const __global float* rotated, int x, int y,int fSlice,  int2 fDim)
 {
-    int index = rcsToIndex((int3)(y, x, fSlice), fDim);
-    return x <fDim.x && y < fDim.y / fDim.x && x >=0 && y >=0 ? (float2 )( rotated[index],1 ): (float2)(0,0);
+    int index = rcsToIndex((int3)(x,y, fSlice), fDim);
+    return x <fDim.x && y < (fDim.y / fDim.x) && x >=0 && y >=0 ? (float2 )( rotated[index],1 ): (float2)(0,0);
 }
 
 // fDim.x : nr of columns in the filter
@@ -250,63 +329,69 @@ float2 getRotatedValue( const __global float* rotated, int x, int y,int fSlice, 
 // fDim.z : nr of rotations
 __kernel void accumulateRotateKernels(
     const __global float* rotatedOutput,
-    const int4 fDim,
+    const int3 fDim,
     const __constant float2* sinCos,
-    __global float* kernelOutput
+    __global float* kernelOutput,
+    const int maxIndex
 )
 {
     int index = get_global_id(0);
-    int2 filterSize=(int2)(fDim.y, fDim.x*fDim.y);
+    int2 filterSize=(int2)(fDim.x, fDim.x*fDim.y);
     int3 rcs = indexToRCS(index, filterSize );
     
     int slice = rcs.z;
     int nrOfRotations = fDim.z;
+    if ( index < maxIndex ){    
 
-    for(int currentRotation = 0 ; currentRotation < nrOfRotations; ++currentRotation){
-        int fSlice = rcs.z * nrOfRotations + currentRotation;
-        float sa = sinCos[currentRotation].x;
-        float ca = sinCos[currentRotation].y;
+        float sum = 0;
+        for(int currentRotation = 0 ; currentRotation < nrOfRotations; ++currentRotation){
+            int fSlice = rcs.z * nrOfRotations + currentRotation;
+            float sa = sinCos[currentRotation].x;
+            float ca = sinCos[currentRotation].y;
 
-        float rcx = fDim.x / 2.0f;
-        float rcy = fDim.y / 2.0f;
+            float rcx = fDim.x / 2.0f;
+            float rcy = fDim.y / 2.0f;
 
-        float x = rcs.x;
-        float y = rcs.y;
+            float x = rcs.x;
+            float y = rcs.y;
 
-        float rx = x - rcx;
-        float ry = y - rcy;
+            float rx = x - rcx;
+            float ry = y - rcy;
 
-        float ox = rcx + rx * ca - ry * sa;
-        float oy = rcy + rx * sa + ry * ca;
+            float ox = rcx + rx * ca - ry * sa;
+            float oy = rcy + rx * sa + ry * ca;
 
-        float xPerc = fabs(fmod(ox, 1));
-        float yPerc = fabs(fmod(oy, 1));
-        int startx = (int) ox;
-        int starty = (int) oy;
+            float xPerc = fabs(fmod(ox, 1));
+            float yPerc = fabs(fmod(oy, 1));
+            int startx = (int) ox;
+            int starty = (int) oy;
 
-        float4 i;
-        float4 mask;
+            float4 i;
+            float4 mask;
 
-        float2 i1 = getRotatedValue(rotatedOutput, startx,     starty     , fSlice, filterSize);
-        float2 i2 = getRotatedValue(rotatedOutput, startx,     starty + 1 , fSlice, filterSize);
-        float2 i3 = getRotatedValue(rotatedOutput, startx + 1, starty     , fSlice, filterSize);
-        float2 i4 = getRotatedValue(rotatedOutput, startx + 1, starty + 1 , fSlice, filterSize);
+            float2 i1 = getRotatedValue(rotatedOutput, startx,     starty     , fSlice, filterSize);
+            float2 i2 = getRotatedValue(rotatedOutput, startx,     starty + 1 , fSlice, filterSize);
+            float2 i3 = getRotatedValue(rotatedOutput, startx + 1, starty     , fSlice, filterSize);
+            float2 i4 = getRotatedValue(rotatedOutput, startx + 1, starty + 1 , fSlice, filterSize);
 
-        i.x = i1.x; mask.x = i1.y;
-        i.y = i2.x; mask.y = i2.y;
-        i.z = i3.x; mask.z = i3.y;
-        i.w = i4.x; mask.w = i4.y;
+            i.x = i1.x; mask.x = i1.y;
+            i.y = i2.x; mask.y = i2.y;
+            i.z = i3.x; mask.z = i3.y;
+            i.w = i4.x; mask.w = i4.y;
 
-        float4 a;
-        a.x = (1 - xPerc) * (1 - yPerc);
-        a.y = (1 - xPerc) * (yPerc);
-        a.z = xPerc * (1 - yPerc);
-        a.w = xPerc * yPerc;
+            float4 a;
+            a.x = (1 - xPerc) * (1 - yPerc);
+            a.y = (1 - xPerc) * (yPerc);
+            a.z = xPerc * (1 - yPerc);
+            a.w = xPerc * yPerc;
 
-        float renormSum = dot(a,mask);
-        float div = fabs(renormSum) < 0.0001f? 1:renormSum;
-        float result = dot(i,a) / div;
-        kernelOutput[rcsToIndex( (int3)(rcs.y,rcs.x,slice), filterSize)] += result ; 
+            float renormSum = dot(a,mask);
+            float div = fabs(renormSum) < 0.00001f? 1:renormSum;
+            float result = dot(i,a) / div;
+            sum += result ; 
+        }
+    
+        kernelOutput[index] = sum / nrOfRotations; 
     }
 }
 
@@ -338,11 +423,13 @@ __kernel void maxRotation(
     int baseSlice = feature * spf * nrOfRotations;
     for(int r = 0 ; r < nrOfRotations; ++r ){
         int inputIndex =  rcshToIndex((int4)(rcsh.x ,rcsh.y, baseSlice + r * spf +subslice, rcsh.w),iDim);
-       
-        float val = input[ min(inputIndex,desc.z) ];
-        if ( val > m ){
-            m = val;
-            rot = r * rotStepSize;
+        
+        if(inputIndex < desc.z ){
+            float val = input[ inputIndex ];
+            if ( val > m ){
+                m = val;
+                rot = r * rotStepSize;
+            }
         }
     }
     valOutput[index] = m;
@@ -380,7 +467,9 @@ __kernel void inverseMaxRotation(
     
     int oSlice = feature * spf * nrOfRotations +  rotationIndex *spf + subslice;
     int oIndex = rcshToIndex( (int4)(rcsh.x, rcsh.y, oSlice, rcsh.w),oDim);
-    output[min(oIndex,desc.z)] = value;
+    if ( oIndex < desc.z ){
+        output[oIndex] = value;
+    }
 }
 
 // iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
@@ -391,37 +480,36 @@ __kernel void forwardPancake(
     const int3 iDim,
     __global float* weights,
     const int3 wDim,
+    __global float* biases,
+    const int3 bDim,
     __global float* output,
     const int3 oDim,
-    const int2 groups
+    const int2 metaData
 )
 {
     int index = get_global_id(0);
     int4 rcsh = indexToRCSH(index, oDim);
-    
-    int slicesPerGroup = groups.x;
-    int nrOfBiases = groups.y;
 
-    int inputBaseSlice = rcsh.z * slicesPerGroup;
-    int weightBaseSlice = rcsh.z * (slicesPerGroup+nrOfBiases);
+    int slicesPerGroup = metaData.x;
+
+    int slice = rcsh.z * slicesPerGroup;
     
     float sum = 0;
     
     for(int s = 0 ; s < slicesPerGroup; ++s ){
-        int4 iRCSH = (int4)(rcsh.x, rcsh.y, inputBaseSlice + s, rcsh.w);
+        int4 iRCSH = (int4)(rcsh.x, rcsh.y, slice + s, rcsh.w);
         int iIndex = rcshToIndex(iRCSH,iDim);
-        int4 wRCSH = (int4)(rcsh.x, rcsh.y, weightBaseSlice + s, rcsh.w);
-        int wIndex = rcshToIndex(wRCSH,wDim);
+        int3 wRCSH = (int3)(rcsh.x, rcsh.y, slice + s);
+        int wIndex = rcsToIndex(wRCSH,wDim.xy);
 
         sum += input[iIndex] * weights[wIndex];
     }
-    for(int b = 0 ; b < nrOfBiases; b++)
-    {
-        int4 wRCSH = (int4)(rcsh.x, rcsh.y, inputBaseSlice + slicesPerGroup + b , rcsh.w);
-        int wIndex = rcshToIndex(wRCSH,wDim);
-        sum += weights[wIndex];
+    int bIndex = rcsToIndex(rcsh.xyz,bDim.xy);
+    sum += biases[bIndex];
+
+    if ( index < metaData.y ){
+        output[index] = sum;
     }
-    output[index] = sum;
 }
 
 // iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
@@ -431,15 +519,43 @@ __kernel void deltasPancake(
     __global float* input,
     const int3 iDim,
     __global float* deltas,
-    const int3 wDim,
+    const int3 dDim,
     __global float* deltaWeights,
+    const int3 dwDim,
+    const int slicesPerGroup
+)
+{
+    int index = get_global_id(0);
+    int4 rcsh = indexToRCSH(index, dwDim);
+
+    int oSlice = rcsh.z / slicesPerGroup;
+
+    float i = input[index];
+    float od = deltas[ rcshToIndex( (int4)(rcsh.x,rcsh.y, oSlice, rcsh.w),dDim)];
+    
+    deltaWeights[index] = i*od;
+}
+
+// iDim: (x,y,z) rowSize, sliceSize, hyperSliceSize of input.
+// oDim : (x,y,z) rowSize, sliceSize, hyperSliceSize of output.
+// groups : (x,y) slicesPerGroup, nrOfBiases.
+__kernel void backPropPancake(
+    __global float* deltas,
+    const int3 dDim,
+    __global float* weights,
+    const int3 wDim,
+    __global float* output,
     const int3 oDim,
-    const int2 groups
+    const int slicesPerGroup
 )
 {
     int index = get_global_id(0);
     int4 rcsh = indexToRCSH(index, oDim);
+
+    int deltaSlice = rcsh.z / slicesPerGroup;
+
+    float od = deltas[ rcshToIndex( (int4)(rcsh.x,rcsh.y, deltaSlice,rcsh.w),dDim)];
+    float w = weights[rcsToIndex(rcsh.xyz, wDim.xy)];
     
-    
-    deltaWeights[index] = 0;
+    output[index] = od*w;
 }

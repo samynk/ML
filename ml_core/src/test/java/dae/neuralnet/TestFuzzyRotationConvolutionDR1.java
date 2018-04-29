@@ -28,10 +28,12 @@ import static org.junit.Assert.*;
  */
 public class TestFuzzyRotationConvolutionDR1 {
 
-    private static final int TRAIN_ITERATIONS = 20000;
+    private static final int TRAIN_ITERATIONS = 10000;
+    private static final int EPOCHTEST = 500;
+    private static final int EPOCHTESTITERATION = 10;
     private static final int TEST_ITERATIONS = -1;
-    private static final int BATCHSIZE = 100;
-    private static final float LEARNING_RATE = 0.01f;
+    private static final int BATCHSIZE = 40;
+    private static final float LEARNING_RATE = 0.1f;
 
     private String neuralNetBase = "2018_3_22/10_29";
 
@@ -64,44 +66,56 @@ public class TestFuzzyRotationConvolutionDR1 {
         fmatrix trainSetLabels = blr.getResult();
         System.out.println(trainSetLabels.getSizeAsString());
 
-        int numStartFilters = 6;
+        int numStartFilters = 8;
 
-        RotationConvolutionLayer layer1 = new RotationConvolutionLayer(28, 28, numStartFilters, 16, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        RotationConvolutionLayer layer1 = new RotationConvolutionLayer(28, 28, numStartFilters, 8, 5, 1, BATCHSIZE, ActivationFunction.RELU);
         layer1.setName("convolution_layer 1");
 
-        RotationPoolLayer rpl = new RotationPoolLayer(28, 28, numStartFilters, 16, BATCHSIZE);
+        RotationPoolLayer rpl = new RotationPoolLayer(28, 28, numStartFilters, 8, BATCHSIZE);
+        rpl.setName("Rotation pool layer");
 
         MaxRotationPoolLayer mpl = new MaxRotationPoolLayer(28, 28, numStartFilters * 2, 2, 2, BATCHSIZE);
         mpl.setName("max rotation pool");
 
         int mplOutputs = mpl.getNrOfOutputs();
 
-        RotationConvolutionLayer vl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
-        vl2.setAngles(-(float) Math.PI / 8, (float) Math.PI / 8);
-        RotationConvolutionLayer rl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.LEAKYRELU);
-        rl2.setAngles(-(float) Math.PI / 8, (float) Math.PI / 8);
+        RotationConvolutionLayer vl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.RELU);
+        vl2.setAngles(0, (float) Math.PI / 2);
+        RotationConvolutionLayer rl2 = new RotationConvolutionLayer(14, 14, numStartFilters, 4, 8, 5, 1, BATCHSIZE, ActivationFunction.RELU);
+        rl2.setAngles(0, (float) Math.PI / 2);
         rl2.setAddAngleBias(true);
         CompositeLayer cl = new CompositeLayer(
-                Dimension.Dim(14, 14, numStartFilters * 2, BATCHSIZE), 
-                Dimension.Dim(14, 14, numStartFilters * 8 * 8, BATCHSIZE), 
+                Dimension.Dim(14, 14, numStartFilters * 2, BATCHSIZE),
+                Dimension.Dim(14, 14, numStartFilters * 64, BATCHSIZE),
                 vl2, rl2);
         cl.setName("Composite layer");
 
-        PoolLayer pl2 = new PoolLayer(14, 14, numStartFilters * 8 * 8, 2, 2, BATCHSIZE);
-        pl2.setName("pool layer 2");
+        PancakeLayer pcl1 = new PancakeLayer(
+                Dimension.Dim(14, 14, numStartFilters * 64, BATCHSIZE),
+                true, 2, ActivationFunction.IDENTITY);
 
-        AbstractLayer layer6 = new Layer(pl2.getNrOfOutputs(), 1, 1000, BATCHSIZE, ActivationFunction.RELU);
-        layer6.setName("final_layer");
+        RotationPoolLayer rpl2 = new RotationPoolLayer(14, 14, numStartFilters * 4, 8, BATCHSIZE);
+        rpl2.setAngles(0, (float) Math.PI / 2);
 
-        AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
-        layer7.setName("final_layer");
+        MaxRotationPoolLayer mpl2 = new MaxRotationPoolLayer(14, 14, numStartFilters * 8, 2, 2, BATCHSIZE);
+        AbstractLayer layer6 = new Layer(mpl2.getNrOfOutputs(), 1, 60, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        layer1.setName("final_layer");
 
+        AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 1, BATCHSIZE, ActivationFunction.CESIGMOID);
+        layer1.setName("final_layer");
+
+        DemuxLayer demux = new DemuxLayer(10, BATCHSIZE, layer6, layer7);
+        demux.setName("demux");
+
+//        AbstractLayer layer8 = new Layer(layer7.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
+//        layer8.setName("layer8");
         LearningRate lrd = new LearningRateConst(LEARNING_RATE / BATCHSIZE);
-        DeepLayer dl = new DeepLayer(lrd, layer1, rpl, mpl, cl, pl2, layer6, layer7);
+        //DeepLayer dl = new DeepLayer(lrd, layer1, rpl, mpl, cl, pcl1, rpl2, mpl2, layer6, layer7);
+        DeepLayer dl = new DeepLayer(lrd, layer1, rpl, mpl, cl, pcl1, rpl2, mpl2, demux);
 
         dl.setCostFunction(new CrossEntropyCostFunction());
         Random r = new Random(System.currentTimeMillis());
-        dl.randomizeWeights(r, -5f, 5f);
+        dl.randomizeWeights(r, -1, 1f);
 
         int maxImage = images.getNrOfHyperSlices();
         fmatrix image = new fmatrix(images.getNrOfRows(), 1, 1, BATCHSIZE);
@@ -111,6 +125,7 @@ public class TestFuzzyRotationConvolutionDR1 {
         target.setName("target");
 
         String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
+        String outputFolder = "outputs/" + dl.getTrainingStartTimeAsFolder();
         System.out.println(image.getSizeAsString());
         for (int i = 0; i < TRAIN_ITERATIONS; ++i) {
             for (int b = 0; b < BATCHSIZE; ++b) {
@@ -122,10 +137,14 @@ public class TestFuzzyRotationConvolutionDR1 {
             target.makeMaster();
 
             dl.train(i, image, target, TrainingMode.BATCH);
+
+            if (i % EPOCHTEST == 0) {
+                //layer6.enableDropLayer(false);
+                String epochFolder = weightFolder + "/epoch" + (1 + i / EPOCHTEST);
+                DigitRecognitionTester.testDigitRecognition(dl, epochFolder, BATCHSIZE, EPOCHTESTITERATION, r, false);
+                //layer6.enableDropLayer(true);
+            }
         }
-        dl.sync();
-        dl.analyzeWeights();
-        dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
 
         DeepLayerWriter dlw = new DeepLayerWriter();
         Path origin = null;
@@ -136,8 +155,14 @@ public class TestFuzzyRotationConvolutionDR1 {
         } else {
             origin = Paths.get(System.getProperty("user.home"), ".nn", weightFolder, "final.nn");
         }
+        //layer6.enableDropLayer(false);
         dlw.writeDeepLayer(origin, increment, dl);
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r, true);
+
+        dl.sync();
+        dl.analyzeWeights();
+        dl.writeWeightImages(weightFolder, TRAIN_ITERATIONS);
+        dl.writeOutputImages(outputFolder);
     }
 
     public void testNeuralNet() {
@@ -148,7 +173,7 @@ public class TestFuzzyRotationConvolutionDR1 {
 
         Random r = new java.util.Random();
         String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r, true);
 
     }
 }

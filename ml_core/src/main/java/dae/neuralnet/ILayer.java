@@ -24,6 +24,12 @@ public interface ILayer {
      * @return the name of the layer.
      */
     public String getName();
+    
+    /**
+     * Duplicates this layer.
+     * @return the duplicated layer.
+     */
+    public ILayer duplicate();
 
     /**
      * @return the total number of inputs.
@@ -151,4 +157,6 @@ public interface ILayer {
      * Syncs the matrices with the matrices on the gpu.
      */
     public void sync();
+
+    
 }

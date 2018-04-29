@@ -4,7 +4,6 @@
  */
 package dae.neuralnet;
 
-import dae.matrix.IndexedFunction;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
 import dae.matrix.zpmatrix;
@@ -55,16 +54,24 @@ public class RotationConvolutionLayer implements ILayer {
      * The weight matrices
      */
     private final imatrix weights;
+    private final imatrix biases;
+    private final imatrix newBiases;
+    private final imatrix biasesBatch;
+    private final imatrix biasesBatchVector;
     /**
      * The rotated weights.
      */
+    private final fmatrix rotatedKernelsBatch;
+    private final fmatrix rotatedKernelsBatchVector;
     private final imatrix rotatedKernels;
     private boolean addAngleAsBias;
     private fmatrix rotatedKernelsBias;
     /**
      * the new weights.
      */
+
     private final fmatrix newWeights;
+
     /**
      * The inputs for this layer.
      */
@@ -104,7 +111,8 @@ public class RotationConvolutionLayer implements ILayer {
     /**
      * The gradient algorithm.
      */
-    private GradientAlgorithm gradientAlgorithm;
+    private GradientAlgorithm gradientAlgorithmWeights;
+    private GradientAlgorithm gradientAlgorithmBiases;
 
     private float startAngle = 0;
     private float endAngle = (float) (Math.PI - Math.PI / 8);
@@ -167,9 +175,22 @@ public class RotationConvolutionLayer implements ILayer {
         // filter weights are shared.
 
         this.weights = weights;
-        this.gradientAlgorithm = new AdamGradientAlgorithm(weights);
+        this.biases = new fmatrix(sInputs * features * rotations, 1);
+        this.newBiases = new fmatrix(sInputs * features * rotations, 1);
+        this.biasesBatch = new fmatrix(sInputs * features * rotations, 1, 1, batchSize);
+        this.biasesBatchVector = new fmatrix(batchSize, 1);
+        biasesBatchVector.applyFunction(x -> 1.0f);
+
+        this.gradientAlgorithmWeights = new AdamGradientAlgorithm(weights);
+        this.gradientAlgorithmBiases = new AdamGradientAlgorithm(biases);
+
         this.newWeights = new fmatrix(filter, filter, sInputs * features);
         this.rotatedKernels = new fmatrix(filter, filter, sInputs * features * rotations);
+
+        this.rotatedKernelsBatch = new fmatrix(filter, filter, sInputs * features * rotations, batchSize);
+
+        this.rotatedKernelsBatchVector = new fmatrix(batchSize, 1);
+        rotatedKernelsBatchVector.applyFunction(x -> 1);
 
         int padding = (filter - 1) / 2;
         int oR = 1 + (wInputs - filter + padding * 2) / stride;
@@ -183,6 +204,7 @@ public class RotationConvolutionLayer implements ILayer {
         this.rotations = rotations;
 
         inputs = new fmatrix(wInputs, hInputs, sInputs, batchSize, padding);
+
         backpropErrors = new fmatrix(wInputs, hInputs, sInputs, batchSize);
 
         errors = new fmatrix(oR, oC, sInputs * features * rotations, batchSize);
@@ -197,7 +219,26 @@ public class RotationConvolutionLayer implements ILayer {
         this.batchSize = batchSize;
     }
     
-    public void setAngles(float startAngle, float endAngle){
+     /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        // int wInputs, int hInputs, int sInputs, int features, int rotations, int filter, int stride, int batchSize, ActivationFunction af
+        return new RotationConvolutionLayer(this.getNrOfWInputs(),
+            this.getNrOfHInputs(),
+            this.getNrOfSInputs(),
+            this.features,
+            this.rotations,
+            this.filterSize,
+            this.stride,
+            this.batchSize,
+            this.function);
+    }
+
+    public void setAngles(float startAngle, float endAngle) {
         this.startAngle = startAngle;
         this.endAngle = endAngle;
     }
@@ -208,8 +249,8 @@ public class RotationConvolutionLayer implements ILayer {
             float angleStep = (endAngle - startAngle) / (rotations - 1);
             this.rotatedKernelsBias = new fmatrix(rotatedKernels.getNrOfRows(), rotatedKernels.getNrOfColumns(), rotatedKernels.getNrOfSlices());
             rotatedKernelsBias.applyCellFunction((int row, int column, int slice, float value) -> {
-                int r = slice % features;
-                return startAngle + r*angleStep;
+                int r = slice % rotations;
+                return startAngle + r * angleStep;
             });
         }
     }
@@ -290,13 +331,13 @@ public class RotationConvolutionLayer implements ILayer {
 
     @Override
     public void forward() {
-        inputs.sync();
+
         fmatrix.rotateKernels(this.weights, rotations, startAngle, endAngle, this.rotatedKernels);
-        if ( addAngleAsBias ){
+        if (addAngleAsBias) {
             fmatrix.dotadd(rotatedKernels, rotatedKernels, this.rotatedKernelsBias);
         }
-        fmatrix.batchConvolve(inputs, this.rotatedKernels, stride, this.outputs);
 
+        fmatrix.batchConvolveBias(inputs, this.rotatedKernels, this.biases, stride, this.outputs);
         switch (function) {
             case SOFTMAX:
                 fmatrix.softMaxPerRow(outputs);
@@ -319,12 +360,17 @@ public class RotationConvolutionLayer implements ILayer {
     @Override
     public void calculateNewWeights(float learningRate) {
         rotatedKernels.reset();
-        fmatrix.batchConvolve(inputs, deltas, this.stride, rotatedKernels);
-        if (this.addAngleAsBias){
-            fmatrix.dotsubtract(rotatedKernels, rotatedKernels, rotatedKernelsBias);            
-        }
+        fmatrix.deltasBatchConvolve(inputs, deltas, this.stride, rotatedKernelsBatch);
+        fmatrix.batchLC(rotatedKernelsBatch, rotatedKernelsBatchVector, rotatedKernels);
+
+        fmatrix.sumPerSlice(deltas, biasesBatch);
+        fmatrix.batchLC(biasesBatch, biasesBatchVector, newBiases);
+
+//        if (this.addAngleAsBias) {
+//            fmatrix.dotsubtract(rotatedKernels, rotatedKernels, rotatedKernelsBias);
+//        }
         fmatrix.accumulateRotateKernels(rotatedKernels, rotations, startAngle, endAngle, newWeights);
-       
+
     }
 
     @Override
@@ -334,35 +380,44 @@ public class RotationConvolutionLayer implements ILayer {
         // backpropErrors matrix.
         fmatrix.batchBackpropCorrelate(this.zpDeltas, this.weights, this.stride, backpropErrors);
         fmatrix.copyIntoSlice(backpropErrors, errors);
-        backpropErrors.sync();
+        // backpropErrors.sync();
     }
 
     @Override
     public void adaptWeights(float factor) {
-        gradientAlgorithm.adaptWeights(newWeights, factor);
+        gradientAlgorithmWeights.adaptWeights(newWeights, factor);
+        gradientAlgorithmBiases.adaptWeights(newBiases, factor);
     }
 
     @Override
     public void writeWeightImage(String file) {
-        Path p = Paths.get(file);
+        Path p = Paths.get(file + "_original");
         fmatrix.writeAs3DImage(weights, (int) (Math.sqrt(features * inputs.getNrOfSlices()) + 1), 5, p);
+
+        Path p2 = Paths.get(file + "_rotated");
+        fmatrix.writeAs3DImage(rotatedKernels, features * inputs.getNrOfSlices(), 5, p2);
     }
 
     @Override
     public void writeOutputImage(String file) {
-        float max = this.outputs.max().value;
-        float min = this.outputs.min().value;
+        imatrix m = outputs;
+        m.sync();
+        float max = m.max().value;
+        float min = m.min().value;
 
         float factor = 255f / (max - min);
         System.out.println("factor: " + factor);
 
-        BufferedImage bi = new BufferedImage(outputs.getNrOfColumns(), (outputs.getNrOfRows() + 5) * outputs.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
-        for (int slice = 0; slice < outputs.getNrOfSlices(); ++slice) {
-            for (int r = 0; r < outputs.getNrOfRows(); ++r) {
-                for (int c = 0; c < outputs.getNrOfColumns(); ++c) {
-                    float p = outputs.get(r, c, slice);
-                    int pi = (int) Math.round((p - min) * factor);
-                    bi.setRGB(c, r + slice * (outputs.getNrOfRows() + 5), (pi << 16) + (pi << 8) + pi);
+        int padding = 0;
+        BufferedImage bi = new BufferedImage((m.getNrOfColumns() + padding) * m.getNrOfHyperSlices(), (m.getNrOfRows() + padding) * m.getNrOfSlices(), BufferedImage.TYPE_BYTE_GRAY);
+        for (int h = 0; h < m.getNrOfHyperSlices(); ++h) {
+            for (int slice = 0; slice < m.getNrOfSlices(); ++slice) {
+                for (int r = 0; r < m.getNrOfRows(); ++r) {
+                    for (int c = 0; c < m.getNrOfColumns(); ++c) {
+                        float p = m.get(r, c, slice, h);
+                        int pi = (int) Math.round((p - min) * factor);
+                        bi.setRGB(c + h * (m.getNrOfColumns() + padding), r + slice * (m.getNrOfRows() + padding), (pi << 16) + (pi << 8) + pi);
+                    }
                 }
             }
         }
@@ -396,7 +451,6 @@ public class RotationConvolutionLayer implements ILayer {
         //        }
         // 3. multiply the derivatives with the errors.
         fmatrix.dotmultiply(deltas, errors, derivatives);
-
         // 4. Calculate the new weights
         calculateNewWeights(learningRate);
     }
@@ -404,6 +458,7 @@ public class RotationConvolutionLayer implements ILayer {
     @Override
     public void randomizeWeights(Random r, float min, float max) {
         weights.applyFunction(x -> min + r.nextFloat() * (max - min));
+        biases.applyFunction(x -> min + r.nextFloat() * (max - min));
     }
 
     @Override
@@ -434,5 +489,6 @@ public class RotationConvolutionLayer implements ILayer {
     @Override
     public void sync() {
         this.weights.sync();
+        this.rotatedKernels.sync();
     }
 }

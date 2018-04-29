@@ -28,7 +28,7 @@ public class RotationPoolLayer implements ILayer {
     private String name = "RotationPoolLayer" + (count++);
 
     private float startAngle = 0;
-    private float endAngle = (float) (Math.PI- Math.PI/8);
+    private float endAngle = (float) (Math.PI - Math.PI / 8);
 
     private final fmatrix valOutputs;
     private final fmatrix rotOutputs;
@@ -37,15 +37,12 @@ public class RotationPoolLayer implements ILayer {
     private final fmatrix outputs;
     private final fmatrix inputs;
 
-    
     private final fmatrix errors;
     private final imatrix flatErrorView;
-    
+
     private final int batchSize;
     private final int features;
     private final int rotations;
-    
-    
 
     public RotationPoolLayer(int wInputs, int hInputs, int features, int rotations, int batchSize) {
         this.batchSize = batchSize;
@@ -58,10 +55,20 @@ public class RotationPoolLayer implements ILayer {
 
         outputs = new fmatrix(wInputs, hInputs, features * 2, batchSize);
         inputs = new fmatrix(wInputs, hInputs, features * rotations, batchSize);
-       
-        errors = new fmatrix(wInputs, hInputs, features *  2, batchSize);
-        
+
+        errors = new fmatrix(wInputs, hInputs, features * 2, batchSize);
+
         flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
+    }
+
+    /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        return new RotationPoolLayer(inputs.getNrOfRows(), inputs.getNrOfColumns(), this.features, this.rotations, batchSize);
     }
 
     /**
@@ -92,6 +99,11 @@ public class RotationPoolLayer implements ILayer {
     @Override
     public String getName() {
         return name;
+    }
+
+    public void setAngles(float startAngle, float endAngle) {
+        this.startAngle = startAngle;
+        this.endAngle = endAngle;
     }
 
     @Override
@@ -130,7 +142,7 @@ public class RotationPoolLayer implements ILayer {
     public void setInputs(imatrix input) {
         fmatrix.copyIntoSlice(input, this.inputs);
     }
-    
+
     @Override
     public imatrix getInputs() {
         return inputs;
@@ -169,7 +181,7 @@ public class RotationPoolLayer implements ILayer {
      */
     @Override
     public void calculateErrors(imatrix errors) {
-        fmatrix.unzip(this.errors, valOutputs,rotOutputsBin );
+        fmatrix.unzip(this.errors, valOutputs, rotOutputsBin);
         fmatrix.maxInverseRotation(valOutputs, rotOutputs, features, rotations, startAngle, endAngle, errors);
     }
 

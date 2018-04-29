@@ -6,10 +6,13 @@ import dae.matrix.integer.intmatrix;
 import dae.matrix.mdim2D;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.activation.ActivationFunction;
+import java.util.ArrayList;
+import java.util.List;
 import static org.jocl.CL.clCreateBuffer;
 import static org.jocl.CL.clReleaseCommandQueue;
 import static org.jocl.CL.clReleaseContext;
 import org.jocl.Sizeof;
+import org.jocl.blast.CLBlast;
 import static org.jocl.blast.CLBlast.CLBlastSgemm;
 import static org.jocl.blast.CLBlastLayout.CLBlastLayoutColMajor;
 import static org.jocl.blast.CLBlastTranspose.*;
@@ -119,6 +122,40 @@ public class FMatrixOpGpu implements FMatrixOp {
     @Override
     public void batchConvolve(imatrix input, imatrix filter, int stride, imatrix output) {
         GPU.KERNEL_CONVOLV.batchConvolv(input, filter, stride, output);
+    }
+    
+    /**
+     * Calculates the deltas for the batch convolution process.
+     * 
+     * @param input the input (with batch multiplicity).
+     * @param deltas the deltas( with batch multiplicity).
+     * @param stride the stride.
+     * @param kernel the kernel (with batch multiplicity).
+     */
+    @Override
+    public void deltasBatchConvolve(imatrix input, imatrix deltas, int stride, imatrix kernel){
+        GPU.KERNEL_CONVOLV.deltasBatchConvolv(input, deltas, stride, kernel);
+    }
+    
+    @Override
+    public void sumPerSlice(imatrix src, imatrix dst){
+        GPU.KERNEL_MATRIX_OP.sumPerSlice(src,dst);
+    }
+
+    /**
+     * Applies a convolution filter on the input matrix, with the slices taken
+     * into account. A bias term will be added to each output cell as defined in
+     * the bias matrix which contains the bias terms in rows.
+     *
+     * @param input the matrix to convolve.
+     * @param filter the filter to apply.
+     * @param bias a row matrix with a bias term per filter slice.
+     * @param stride the stride with which to advance the filter.
+     * @param output the matrix where the output is stored.
+     */
+    @Override
+    public void batchConvolve(imatrix input, imatrix filter, imatrix bias, int stride, imatrix output) {
+        GPU.KERNEL_CONVOLV.batchConvolvBias(input, filter, bias, stride, output);
     }
 
     /**
@@ -277,20 +314,22 @@ public class FMatrixOpGpu implements FMatrixOp {
     public void batchBackpropMaxPool(imatrix input, intmatrix maskLayer, int scaleX, int scaleY, imatrix output) {
         GPU.KERNEL_POOL.backpropMaxPool(input, maskLayer, scaleX, scaleY, output);
     }
-    
+
     /**
-     * The input contains data per two slices. The even slices contain the value 
-     * data, the oneven slices contain the rotation data. The max pooling is 
+     * The input contains data per two slices. The even slices contain the value
+     * data, the oneven slices contain the rotation data. The max pooling is
      * applied to the value data, with conservation of the rotation data.
+     *
      * @param input the input matrix with value and rotation slices.
      * @param output the scale output matrix with value and rotation slices.
-     * @param maskLayer the layer that contains the cells with the maximum value.
+     * @param maskLayer the layer that contains the cells with the maximum
+     * value.
      */
     @Override
-    public void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer){
+    public void maxRotationPool(imatrix input, imatrix output, intmatrix maskLayer) {
         GPU.KERNEL_POOL.maxRotationPool(input, output, maskLayer);
     }
-    
+
     /**
      * Transfers the maximum values into the output matrix at the correct cell
      * location as indicated by the masklayer.
@@ -301,8 +340,8 @@ public class FMatrixOpGpu implements FMatrixOp {
      * @param output the output matrix.
      */
     @Override
-    public void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output){
-         GPU.KERNEL_POOL.backpropMaxRotationPool(input, maskLayer, output);
+    public void backpropMaxRotationPool(imatrix input, intmatrix maskLayer, imatrix output) {
+        GPU.KERNEL_POOL.backpropMaxRotationPool(input, maskLayer, output);
     }
 
     @Override
@@ -537,6 +576,18 @@ public class FMatrixOpGpu implements FMatrixOp {
     public void zip(imatrix matrix1, imatrix matrix2, imatrix dest) {
         GPU.zip(matrix1, matrix2, dest);
     }
+    
+     /**
+     * Interleaved copy of the slices of the src matrices into the destination
+     * matrix. The slice size of all the src matrices has to be the same.
+     *
+     * @param srcMatrices the list of source matrices.
+     * @param dest the destination matrix.
+     */
+    @Override
+    public void zip(List<imatrix> srcMatrices, imatrix dest) {
+        GPU.zip(srcMatrices, dest);
+    }
 
     /**
      * Unzips the src matrix into two destination matrices per slice. The even
@@ -550,6 +601,18 @@ public class FMatrixOpGpu implements FMatrixOp {
     @Override
     public void unzip(imatrix src, imatrix dest1, imatrix dest2) {
         GPU.unzip(src, dest1, dest2);
+    }
+    
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The slices
+     * will be distributed over the destination matrices.
+     *
+     * @param src the source matrix.
+     * @param dst the list of matrix to unzip the errors into.
+     */
+    @Override
+    public void unzip(imatrix src, List<imatrix> dst){
+        GPU.unzip(src, dst);
     }
 
     /**
@@ -674,18 +737,84 @@ public class FMatrixOpGpu implements FMatrixOp {
     public void maxInverseRotation(imatrix valInput, imatrix rotInput, int nrOfFeatures, int nrOfRotations, float minAngle, float maxAngle, imatrix output) {
         GPU.KERNEL_CONVOLV.maxInverseRotation(valInput, rotInput, nrOfFeatures, nrOfRotations, minAngle, maxAngle, output);
     }
-    
+
     /**
      * Condense slices into one output with optional biases.
+     *
      * @param input the input matrix.
      * @param slicesPerGroup the number of slices per group.
-     * @param biases the nr of biases.
-     * @param weights the weight matrix.
      * @param output the output matrix.
+     *
+     * @param weights the weights for the linear combination of the input
+     * slices.
+     * @param bias the bias per output slice, the number of slices must be equal
+     * to the slices in the output.
      */
     @Override
-    public void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output){
-        GPU.KERNEL_CONVOLV.forwardPancake(input, slicesPerGroup, biases, weights, output);
+    public void forwardPancake(imatrix input, int slicesPerGroup, imatrix weights, imatrix bias, imatrix output) {
+        GPU.KERNEL_CONVOLV.forwardPancake(input, slicesPerGroup, weights, bias, output);
+    }
+
+    /**
+     * Calculates the deltas for the weights of the pancake layer. First the
+     * deltas will be calculated in batch, after that the acumulation of the sum
+     * will be made.
+     *
+     * @param input the current input of the pancake layer.
+     * @param deltas the current deltas back propagated into the pancake layer.
+     * @param slicesPerGroup the number of slices per pancakge group.
+     * @param weightDeltas the batch deltas for the weights in the layer.
+     * @param biasDeltas the bias deltas.
+     */
+    @Override
+    public void deltasPancake(imatrix input, imatrix deltas, int slicesPerGroup, imatrix weightDeltas, imatrix biasDeltas) {
+        GPU.KERNEL_CONVOLV.deltasPancake(input, deltas, slicesPerGroup, weightDeltas, biasDeltas);
+    }
+
+    /**
+     * Calculates the linear combination of all the cells with the same row,
+     * column and slice index. For example if the number of hyperslices is 3,
+     * then a vector with the linear combination factor can be set as [0.5, 0.2,
+     * 2.0] and all the corresponding cells will be linearly combined as:
+     *
+     * 0.5 * c_h1 + 0.2 * c_h2 + 2.0 * h3.
+     *
+     * @param input the input matrix, typically with a batch size bigger than
+     * one.
+     * @param lcVector the vector with the linear combination, the number of
+     * rows must be equal to the batch size.
+     * @param output the output matrix, with the number of rows, columns and
+     * slices equal to the input matrix, but a batch size of one.
+     */
+    @Override
+    public void batchLC(imatrix input, imatrix lcVector, imatrix output) {
+        FloatDeviceBuffer inputDB = input.getDeviceBuffer();
+        FloatDeviceBuffer lcDB = lcVector.getDeviceBuffer();
+        FloatDeviceBuffer outputDB = output.getDeviceBuffer();
+        cl_mem memInput = inputDB.upload();
+        cl_mem memX = lcDB.upload();
+        cl_mem memY = outputDB.upload();
+
+        cl_event event = new cl_event();
+        CLBlast.CLBlastSgemv(CLBlastLayoutColMajor, CLBlastTransposeNo,
+                input.getHyperSliceSize(), input.getNrOfHyperSlices(),
+                1.0f, memInput, 0, input.getHyperSliceSize(),
+                memX, 0, 1,
+                0, memY, 0, 1, GPU.CL_COMMAND_QUEUE, event);
+        outputDB.markGpuAsMaster();
+    }
+
+    /**
+     * Calculates the backpropagation of the pancake layer.
+     *
+     * @param deltas the deltas of the next layer.
+     * @param weights the current weights of this layer.
+     * @param slicesPerGroup the slices per group.
+     * @param output the error output of the backpropagation.
+     */
+    @Override
+    public void backpropPancake(imatrix deltas, imatrix weights, int slicesPerGroup, imatrix output) {
+        GPU.KERNEL_CONVOLV.backpropPancake(deltas, weights, slicesPerGroup, output);
     }
 
     @Override

@@ -112,7 +112,7 @@ public class TestFuzzySingleLayerDR {
             origin = Paths.get(System.getProperty("user.home"), ".nn", weightFolder, "final.nn");
         }
         dlw.writeDeepLayer(origin, increment, dl);
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r,true);
     }
     
    
@@ -124,7 +124,7 @@ public class TestFuzzySingleLayerDR {
         
         Random r = new java.util.Random();
         String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r,true);
 
     }
 }

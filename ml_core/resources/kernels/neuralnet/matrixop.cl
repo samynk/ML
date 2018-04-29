@@ -1,3 +1,30 @@
+int2 indexToRC(int index, int nrOfRows){
+    return (int2)(index%nrOfRows, index/nrOfRows);
+}
+
+int3 indexToRCS(int index, int2 dim){
+    int slice = index / dim.y;
+    int column = (index % dim.y) / dim.x;
+    return (int3)(index% dim.x, column, slice);
+}
+
+int4 indexToRCSH(int index, int3 dim){
+    int hs = index / dim.z;
+    int3 rcs = indexToRCS(index%dim.z, dim.xy);
+    return (int4)(rcs, hs);
+}
+
+int rcToIndex(int row, int column, int nrOfRows){
+    return row + column*nrOfRows;
+}
+
+int rcsToIndex(int3 rcs, int2 dim){
+    return rcs.x + rcs.y*dim.x + rcs.z*dim.y;
+}
+
+int rcshToIndex(int4 rcsh, int3 dim){
+    return rcsh.x + rcsh.y*dim.x + rcsh.z*dim.y +rcsh.w*dim.z;
+}
 
 __kernel void dotadd(
     const __global float* op1,
@@ -26,6 +53,31 @@ __kernel void sumPerRow(
         sum += input[index];
     }
     output[row] = sum;
+}
+
+__kernel void sumPerSlice(
+    __global float* input,
+    int3 inputDim,
+    __global float* output,
+    int3 outputDim,
+    int maxIndex
+)
+{
+
+    int index = get_global_id(0);
+    if (index < maxIndex){
+        int4 rcsh = indexToRCSH(index,outputDim);
+    
+        float sum = 0;
+        float rows = inputDim.x;
+        float cols = inputDim.y / inputDim.x;
+
+        int base = rcshToIndex((int4)(0,0,rcsh.x,rcsh.w),inputDim);
+        for(int i =0; i < inputDim.y; ++i){
+            sum += input[base+i];
+        }
+        output[index] = sum;
+    }
 }
 
 

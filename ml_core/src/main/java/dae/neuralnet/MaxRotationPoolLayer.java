@@ -4,6 +4,7 @@
  */
 package dae.neuralnet;
 
+import dae.matrix.Dimension;
 import dae.matrix.fmatrix;
 import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
@@ -47,18 +48,31 @@ public class MaxRotationPoolLayer implements ILayer {
      * The errors to back propagate in a previous layer.
      */
     private final fmatrix errors;
-    private final imatrix flatErrorView;
+    /**
+     * the dimension of the input
+     */
+    private final Dimension inputDimension;
 
     public MaxRotationPoolLayer(int iWidth, int iHeight, int iSlices, int scaleX, int scaleY, int batchSize) {
         this.scaleX = scaleX;
         this.scaleY = scaleY;
+        inputDimension = new Dimension(iWidth, iHeight, iSlices, batchSize);
         inputs = new fmatrix(iHeight, iWidth, iSlices, batchSize);
         maskLayer = new intmatrix(iHeight / scaleY, iWidth / scaleX, iSlices / 2, batchSize);
         outputs = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
         deltas = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
         errors = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
-        flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
         this.batchSize = batchSize;
+    }
+
+    /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        return new MaxRotationPoolLayer(inputDimension.r, inputDimension.c, inputDimension.s, scaleX, scaleY, inputDimension.h);
     }
 
     /**
@@ -128,13 +142,16 @@ public class MaxRotationPoolLayer implements ILayer {
     @Override
     public void forward() {
         fmatrix.maxRotationPool(inputs, outputs, maskLayer);
+        inputs.sync();
+        outputs.sync();
+        maskLayer.sync();
     }
 
     @Override
     public void setInputs(imatrix input) {
         fmatrix.copyIntoSlice(input, this.inputs);
     }
-    
+
     @Override
     public imatrix getInputs() {
         return inputs;

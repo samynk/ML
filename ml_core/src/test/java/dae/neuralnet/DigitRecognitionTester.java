@@ -7,12 +7,14 @@ package dae.neuralnet;
 import dae.matrix.Cell;
 import dae.matrix.fmatrix;
 import dae.matrix.imatrix;
+import dae.matrix.integer.intmatrix;
 import dae.neuralnet.io.BinImageReader;
 import dae.neuralnet.io.BinLabelReader;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +45,7 @@ public class DigitRecognitionTester {
         TEST_SET_LABELS = testblr.getResult();
     }
 
-    public static void testDigitRecognition(DeepLayer dl, String baseFolder, int batchSize, int testIterations, Random r) {
+    public static void testDigitRecognition(DeepLayer dl, String baseFolder, int batchSize, int testIterations, Random r, boolean writeImages) {
         // test
         int maxImage = TEST_IMAGES.getNrOfHyperSlices();
         fmatrix image = new fmatrix(TEST_IMAGES.getNrOfRows(), 1, 1, batchSize);
@@ -57,16 +59,17 @@ public class DigitRecognitionTester {
             ts.add(new Cell());
         }
         fmatrix target = new fmatrix(10, 1, 1, batchSize);
-        
+
         boolean randomImage = true;
-        if (testIterations == -1){
+        if (testIterations == -1) {
             testIterations = TEST_IMAGES.getNrOfHyperSlices() / batchSize;
             randomImage = false;
         }
-        int nextImage =0;
+        intmatrix digitStatistics = new intmatrix(10, 2);
+        int nextImage = 0;
         for (int i = 0; i < testIterations; ++i) {
             for (int b = 0; b < batchSize; ++b) {
-                if ( randomImage ){
+                if (randomImage) {
                     nextImage = r.nextInt(maxImage);
                 }
                 TEST_IMAGES.getHyperSlice(nextImage, b, image);
@@ -76,7 +79,7 @@ public class DigitRecognitionTester {
             image.makeMaster();
             dl.forward(image);
 
-            fmatrix result = (fmatrix)dl.getLastLayer().getOutputs();
+            fmatrix result = (fmatrix) dl.getLastLayer().getOutputs();
             result.sync();
             result.maxPerColumn(cs);
             target.maxPerColumn(ts);
@@ -84,15 +87,23 @@ public class DigitRecognitionTester {
             for (int br = 0; br < batchSize; ++br) {
                 Cell c = cs.get(br);
                 Cell t = ts.get(br);
+
+                digitStatistics.add(t.row, 1, 1);
                 if (c.row == t.row) {
                     success++;
+                    digitStatistics.add(t.row, 0, 1);
                 }
+
             }
-            writeBatchResults(baseFolder, i, image, result, target);
+            if (writeImages) {
+                writeBatchResults(baseFolder, i, image, result, target);
+            }
         }
         float succesRate = 100.0f * (success * 1.0f / (batchSize * testIterations));
         System.out.println("Nr of successes : " + success);
         System.out.println("Success rate : " + succesRate + "%");
+
+        writeTestResults(baseFolder, succesRate, digitStatistics);
     }
 
     /**
@@ -164,6 +175,38 @@ public class DigitRecognitionTester {
                 int pi = (int) Math.round(p);
 
                 toWrite.setRGB(c, r, (red << 16) + (gre << 8) + blu);
+            }
+        }
+    }
+
+    private static void writeTestResults(String baseFolder, float succesRate, intmatrix digitStatistics) {
+        String homeDir = System.getProperty("user.home");
+        Path exportPath = Paths.get(homeDir, ".nn", baseFolder, "success.txt");
+        if (!Files.exists(exportPath.getParent())){
+            try {
+                Files.createDirectories(exportPath.getParent());
+            } catch (IOException ex) {
+                Logger.getLogger(DigitRecognitionTester.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        BufferedWriter bw = null;
+        try {
+            bw = Files.newBufferedWriter(exportPath);
+
+            bw.write(String.format("Successrate : %.2f\r\n", succesRate));
+
+            for (int i = 0; i < digitStatistics.getNrOfRows(); ++i) {
+                float percent = (100.0f * digitStatistics.get(i, 0)) / digitStatistics.get(i, 1);
+                bw.write(String.format("Digit %d: %.2f \r\n", i, percent));
+
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(DigitRecognitionTester.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                bw.close();
+            } catch (IOException ex) {
+                Logger.getLogger(DigitRecognitionTester.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }

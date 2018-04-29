@@ -2,6 +2,7 @@ package dae.matrix;
 
 import dae.matrix.gpu.FloatDeviceBuffer;
 import dae.matrix.gpu.FMatrixOpGpu;
+import dae.matrix.gpu.GPU;
 import dae.matrix.integer.intmatrix;
 import dae.matrix.op.FMatrixOp;
 import dae.neuralnet.Layer;
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -25,6 +27,8 @@ import javax.imageio.ImageIO;
  * @author Koen Samyn (samyn.koen@gmail.com)
  */
 public class fmatrix implements imatrix {
+
+    
 
     /**
      * The name of the matrix.
@@ -1087,6 +1091,18 @@ public class fmatrix implements imatrix {
         matrixOp.batchConvolve(input, filter, stride, output);
     }
 
+    public static void deltasBatchConvolve(imatrix input, imatrix deltas, int stride, imatrix kernel) {
+        matrixOp.deltasBatchConvolve(input, deltas, stride, kernel);
+    }
+
+    public static void sumPerSlice(imatrix src, imatrix dst) {
+        matrixOp.sumPerSlice(src, dst);
+    }
+
+    public static void batchConvolveBias(imatrix input, imatrix filter, imatrix bias, int stride, imatrix output) {
+        matrixOp.batchConvolve(input, filter, bias, stride, output);
+    }
+
     public static void batchCorrelate(imatrix input, imatrix filter, int stride, imatrix output) {
         matrixOp.batchCorrelate(input, filter, stride, output);
     }
@@ -1295,14 +1311,64 @@ public class fmatrix implements imatrix {
 
     /**
      * Condense slices into one output with optional biases.
+     *
      * @param input the input matrix.
      * @param slicesPerGroup the number of slices per group.
-     * @param biases the nr of biases.
-     * @param weights the weight matrix.
      * @param output the output matrix.
+     *
+     * @param weights the weights for the linear combination of the input
+     * slices.
+     * @param bias the bias per output slice, the number of slices must be equal
+     * to the slices in the output.
      */
-    public static void forwardPancake(imatrix input, int slicesPerGroup, int biases, imatrix weights, imatrix output) {
-        matrixOp.forwardPancake(input, slicesPerGroup, biases, weights, output);
+    public static void forwardPancake(imatrix input, int slicesPerGroup, imatrix weights, imatrix bias, imatrix output) {
+        matrixOp.forwardPancake(input, slicesPerGroup, weights, bias, output);
+    }
+
+    /**
+     * Calculates the deltas for the weights of the pancake layer. First the
+     * deltas will be calculated in batch, after that the acumulation of the sum
+     * will be made.
+     *
+     * @param input the current input of the pancake layer.
+     * @param deltas the current deltas back propagated into the pancake layer.
+     * @param slicesPerGroup the number of slices per pancakge group.
+     * @param weightDeltas the batch deltas for the weights in the layer.
+     * @param biasDeltas the bias deltas.
+     */
+    public static void deltasPancake(imatrix input, imatrix deltas, int slicesPerGroup, imatrix weightDeltas, imatrix biasDeltas) {
+        matrixOp.deltasPancake(input, deltas, slicesPerGroup, weightDeltas, biasDeltas);
+    }
+
+    /**
+     * Calculates the linear combination of all the cells with the same row,
+     * column and slice index. For example if the number of hyperslices is 3,
+     * then a vector with the linear combination factor can be set as [0.5, 0.2,
+     * 2.0] and all the corresponding cells will be linearly combined as:
+     *
+     * 0.5 * c_h1 + 0.2 * c_h2 + 2.0 * h3.
+     *
+     * @param input the input matrix, typically with a batch size bigger than
+     * one.
+     * @param lcVector the vector with the linear combination, the number of
+     * rows must be equal to the batch size.
+     * @param output the output matrix, with the number of rows, columns and
+     * slices equal to the input matrix, but a batch size of one.
+     */
+    public static void batchLC(imatrix input, imatrix lcVector, imatrix output) {
+        matrixOp.batchLC(input, lcVector, output);
+    }
+
+    /**
+     * Calculates the backpropagation of the pancake layer.
+     *
+     * @param deltas the deltas of the next layer.
+     * @param weights the current weights of this layer.
+     * @param slicesPerGroup the slices per group.
+     * @param output the error output of the backpropagation.
+     */
+    public static void backpropPancake(imatrix deltas, imatrix weights, int slicesPerGroup, imatrix output) {
+        matrixOp.backpropPancake(deltas, weights, slicesPerGroup, output);
     }
 
     public static fmatrix dotdivide(fmatrix op1, fmatrix op2) {
@@ -1519,6 +1585,18 @@ public class fmatrix implements imatrix {
     public static void zip(imatrix matrix1, imatrix matrix2, imatrix dest) {
         matrixOp.zip(matrix1, matrix2, dest);
     }
+    
+    /**
+     * Interleaved copy of the slices of the src matrices into
+     * the destination matrix. The slice size of all the src matrices
+     * has to be the same.
+     *
+     * @param srcMatrices the list of source matrices.
+     * @param dest the destination matrix.
+     */
+    public static void zip(List<imatrix> srcMatrices, imatrix dest) {
+        matrixOp.zip(srcMatrices, dest);
+    }
 
     /**
      * Unzips the src matrix into two destination matrices per slice. The even
@@ -1531,6 +1609,17 @@ public class fmatrix implements imatrix {
      */
     public static void unzip(imatrix src, imatrix dest1, imatrix dest2) {
         matrixOp.unzip(src, dest1, dest2);
+    }
+    
+    /**
+     * Unzips the src matrix into two destination matrices per slice. The slices
+     * will be distributed over the destination matrices.
+     *
+     * @param src the source matrix.
+     * @param dst the list of matrix to unzip the errors into.
+     */
+    public static void unzip(imatrix src, ArrayList<imatrix> dst) {
+       matrixOp.unzip(src, dst);
     }
 
     /**
@@ -1684,7 +1773,7 @@ public class fmatrix implements imatrix {
     }
 
     public void randomize(float min, float max) {
-        Random r = new Random();
+        Random r = new Random(System.currentTimeMillis());
         this.applyFunction(x -> (r.nextFloat() * (max - min)) + min);
     }
 

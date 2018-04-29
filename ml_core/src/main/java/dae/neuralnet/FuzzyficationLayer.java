@@ -61,7 +61,7 @@ public class FuzzyficationLayer implements ILayer {
     public FuzzyficationLayer(int nrOfInputs, int classes, int batchSize) {
         this(nrOfInputs, classes, batchSize, new fmatrix(nrOfInputs * (classes - 1), 1), new fmatrix(nrOfInputs * (classes - 1), 1), ActivationFunction.SIGMOID);
     }
-    
+
     public FuzzyficationLayer(int nrOfInputs, int classes, int batchSize, ActivationFunction function) {
         this(nrOfInputs, classes, batchSize, new fmatrix(nrOfInputs * (classes - 1), 1), new fmatrix(nrOfInputs * (classes - 1), 1), function);
     }
@@ -93,6 +93,16 @@ public class FuzzyficationLayer implements ILayer {
 
         this.function = function;
         this.batchSize = batchSize;
+    }
+
+    /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        return new FuzzyficationLayer(this.nrOfInputs, this.nrOfClasses, this.batchSize, this.function);
     }
 
     /**
@@ -136,7 +146,7 @@ public class FuzzyficationLayer implements ILayer {
     public int getNrOfClasses() {
         return nrOfClasses;
     }
-    
+
     public int getBatchSize() {
         return batchSize;
     }
@@ -152,7 +162,7 @@ public class FuzzyficationLayer implements ILayer {
     public void setInputs(imatrix input) {
         fmatrix.copyIntoSlice(input, this.inputs);
     }
-    
+
     @Override
     public imatrix getInputs() {
         return inputs;
@@ -268,5 +278,4 @@ public class FuzzyficationLayer implements ILayer {
         bWeights.sync();
     }
 
-    
 }

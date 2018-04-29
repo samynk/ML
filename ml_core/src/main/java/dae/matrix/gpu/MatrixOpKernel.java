@@ -33,6 +33,7 @@ public class MatrixOpKernel extends OpenCLKernel {
     cl_kernel random;
     cl_kernel adamVelocity;
     cl_kernel adamAdaptWeights;
+    cl_kernel sumPerSlice;
 
     private long[] localWorkSize = new long[]{OpenCLKernel.DEFAULTWORKSIZE};
 
@@ -59,6 +60,7 @@ public class MatrixOpKernel extends OpenCLKernel {
         random = this.createKernel("rnd_1");
         adamVelocity = this.createKernel("adamVelocity");
         adamAdaptWeights = this.createKernel("adamAdaptWeights");
+        sumPerSlice = this.createKernel("sumPerSlice");
 
         super.releaseProgram();
     }
@@ -281,6 +283,33 @@ public class MatrixOpKernel extends OpenCLKernel {
     public imatrix root(imatrix m) {
         super.applyKernel(root, m);
         return m;
+    }
+    
+    public void sumPerSlice(imatrix src, imatrix dst){
+        FloatDeviceBuffer srcDB = src.getDeviceBuffer();
+        cl_mem srcMem = srcDB.upload();
+        
+        FloatDeviceBuffer dstDB = dst.getDeviceBuffer();
+        cl_mem dstMem = dstDB.getMem();
+        
+        clSetKernelArg(sumPerSlice, 0, Sizeof.cl_mem, Pointer.to(srcMem));
+        clSetKernelArg(sumPerSlice, 1, Sizeof.cl_int4, Pointer.to(srcDB.getDimensionSizes()));
+        clSetKernelArg(sumPerSlice, 2, Sizeof.cl_mem, Pointer.to(dstMem));
+        clSetKernelArg(sumPerSlice, 3, Sizeof.cl_int4, Pointer.to(dstDB.getDimensionSizes()));
+        clSetKernelArg(sumPerSlice, 4, Sizeof.cl_int, Pointer.to(new int[]{dst.getSize()}));
+
+        clEnqueueNDRangeKernel(
+                commandQueue,
+                sumPerSlice,
+                1,
+                null,
+                dstDB.getGlobalWorkSize(),
+                this.localWorkSize,
+                0,
+                null,
+                null);
+
+        dstDB.markGpuAsMaster();
     }
 
     private intmatrix seedMatrix;

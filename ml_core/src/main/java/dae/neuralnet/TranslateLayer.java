@@ -47,6 +47,16 @@ public class TranslateLayer extends AbstractLayer {
         deltaWeights = new fmatrix(1, n);
         newWeights = new fmatrix(1, n);
     }
+    
+     /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        return new TranslateLayer(super.getNrOfInputs(), super.getBatchSize(), super.getActivationFunction());
+    }
 
     @Override
     public void forward() {

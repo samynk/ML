@@ -10,10 +10,10 @@ package dae.matrix;
  */
 public class Dimension {
 
-    private final int r;
-    private final int c;
-    private final int s;
-    private final int h;
+    public final int r;
+    public final int c;
+    public final int s;
+    public final int h;
 
     /**
      * Creates a new dimension object with the given rows, columns, slices and

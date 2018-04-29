@@ -30,8 +30,8 @@ public class CompositeLayer implements ILayer {
     private final ILayer layer2;
 
     private imatrix inputs;
-    private imatrix inputs1;
-    private imatrix inputs2;
+    private final imatrix inputs1;
+    private final imatrix inputs2;
 
     private final imatrix errors;
     private final imatrix layer1Errors;
@@ -60,6 +60,15 @@ public class CompositeLayer implements ILayer {
         layer1Errors = new fmatrix(this.inputDim.getRows(), this.inputDim.getColumns(), this.inputDim.getSlices()/2, this.inputDim.getHyperSlices());
         layer2Errors = new fmatrix(this.inputDim.getRows(), this.inputDim.getColumns(), this.inputDim.getSlices()/2, this.inputDim.getHyperSlices());
         outputs = fmatrix.create(this.outputDim);
+    }
+    
+    /**
+     * Duplicates this layer.
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate(){
+        return  new CompositeLayer(this.inputDim, this.outputDim, layer1.duplicate(), layer2.duplicate());
     }
 
     /**
@@ -194,8 +203,8 @@ public class CompositeLayer implements ILayer {
 
     @Override
     public void writeWeightImage(String file) {
-        layer1.writeWeightImage(file);
-        layer2.writeWeightImage(file);
+        layer1.writeWeightImage(file+"_layer1");
+        layer2.writeWeightImage(file+"_layer2");
     }
 
     @Override

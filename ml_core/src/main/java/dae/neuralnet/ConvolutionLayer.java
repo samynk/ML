@@ -1,5 +1,6 @@
 package dae.neuralnet;
 
+import dae.matrix.Dimension;
 import dae.matrix.fmatrix;
 import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
@@ -47,10 +48,21 @@ public class ConvolutionLayer implements ILayer {
      * The weight matrices
      */
     private final imatrix weights;
+
     /**
      * the new weights.
      */
     private final fmatrix newWeights;
+    private final fmatrix newWeightsBatch;
+    private final fmatrix batchVector;
+    /**
+     * The biases
+     */
+    private final imatrix bias;
+    private final imatrix newBiases;
+    private final imatrix biasBatch;
+    private final imatrix biasBatchVector;
+
     /**
      * The inputs for this layer.
      */
@@ -85,11 +97,17 @@ public class ConvolutionLayer implements ILayer {
     private final fmatrix backpropErrors;
 
     private final ActivationFunction function;
+    
+    /**
+     * The input dimension.
+     */
+    private Dimension inputDimension;
 
     /**
      * The gradient algorithm.
      */
     private GradientAlgorithm gradientAlgorithm;
+    private GradientAlgorithm biasGradientAlgorithm;
 
     /**
      * Creates a new convolution layer. The inputs of the convolutional layer
@@ -148,12 +166,23 @@ public class ConvolutionLayer implements ILayer {
         this.weights = weights;
         this.gradientAlgorithm = new AdamGradientAlgorithm(weights);
         newWeights = new fmatrix(filter, filter, sInputs * features);
+        newWeightsBatch = new fmatrix(filter, filter, sInputs * features, batchSize);
+        batchVector = new fmatrix(batchSize, 1, 1, 1);
+        batchVector.applyFunction(x -> 1);
+
+        bias = new fmatrix(sInputs * features, 1);
+        this.biasGradientAlgorithm = new AdamGradientAlgorithm(bias);
+        newBiases = new fmatrix(sInputs * features, 1);
+        biasBatch = new fmatrix(sInputs * features, batchSize);
+        biasBatchVector = new fmatrix(batchSize, 1);
+        biasBatchVector.applyFunction(x -> 1);
 
         int padding = (filter - 1) / 2;
         this.filterSize = filter;
         this.stride = stride;
         this.features = features;
 
+        inputDimension = new Dimension(wInputs, hInputs, sInputs, batchSize);
         inputs = new fmatrix(wInputs, hInputs, sInputs, batchSize, padding);
         backpropErrors = new fmatrix(wInputs, hInputs, sInputs, batchSize);
 
@@ -172,6 +201,26 @@ public class ConvolutionLayer implements ILayer {
         function = af;
 
         this.batchSize = batchSize;
+    }
+    
+    /**
+     * Duplicates this layer.
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate(){
+        fmatrix dupWeights = new fmatrix( this.weights.getNrOfRows(),
+            this.weights.getNrOfColumns(),
+            this.weights.getNrOfSlices(),
+            this.weights.getNrOfHyperSlices(),
+            this.weights.getZeroPadding());
+        return  new ConvolutionLayer(inputDimension.r, inputDimension.h, inputDimension.s, 
+            this.features,
+            this.filterSize,
+            this.stride,
+            inputDimension.h,
+            this.function,
+            dupWeights);
     }
 
     @Override
@@ -243,7 +292,7 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public void forward() {
-        fmatrix.batchConvolve(inputs, this.weights, stride, this.outputs);
+        fmatrix.batchConvolveBias(inputs, this.weights, this.bias, stride, this.outputs);
 
         switch (function) {
             case SOFTMAX:
@@ -267,7 +316,11 @@ public class ConvolutionLayer implements ILayer {
 
     @Override
     public void calculateNewWeights(float learningRate) {
-        fmatrix.batchConvolve(inputs, deltas, this.stride, newWeights);
+        fmatrix.deltasBatchConvolve(inputs, deltas, stride, newWeightsBatch);
+        fmatrix.batchLC(newWeightsBatch, batchVector, newWeights);
+
+        fmatrix.sumPerSlice(deltas, biasBatch);
+        fmatrix.batchLC(biasBatch, biasBatchVector, newBiases);
     }
 
     @Override
@@ -282,6 +335,7 @@ public class ConvolutionLayer implements ILayer {
     @Override
     public void adaptWeights(float factor) {
         gradientAlgorithm.adaptWeights(newWeights, factor);
+        biasGradientAlgorithm.adaptWeights(newBiases, factor);
     }
 
     @Override

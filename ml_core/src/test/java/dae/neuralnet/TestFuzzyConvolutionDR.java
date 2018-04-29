@@ -27,10 +27,13 @@ import static org.junit.Assert.*;
  */
 public class TestFuzzyConvolutionDR {
 
-    private static final int TRAIN_ITERATIONS = 6000;
+    private static final int TRAIN_ITERATIONS = 20000;
     private static final int TEST_ITERATIONS = -1;
     private static final int BATCHSIZE = 100;
     private static final float LEARNING_RATE = .08f;
+
+    private static final int EPOCHTEST = 500;
+    private static final int EPOCHTESTITERATION = 10;
 
     private String neuralNetBase = "2018_3_22/10_29";
 
@@ -77,17 +80,20 @@ public class TestFuzzyConvolutionDR {
         PoolLayer pl2 = new PoolLayer(14, 14, numStartFilters * 4, 2, 2, BATCHSIZE);
         pl2.setName("pool layer 2");
 
-        FuzzyficationLayer fl = new FuzzyficationLayer(pl2.getNrOfOutputs(), 3, BATCHSIZE, ActivationFunction.TANH);
+        FuzzyficationLayer fl = new FuzzyficationLayer(pl2.getNrOfOutputs(), 2, BATCHSIZE, ActivationFunction.SIGMOID);
         fl.setName("fuzzy layer 1");
 
-        AbstractLayer layer6 = new Layer(fl.getNrOfOutputs(), 1, 600, BATCHSIZE, ActivationFunction.LEAKYRELU);
+        AbstractLayer layer6 = new Layer(fl.getNrOfOutputs(), 1, 60, BATCHSIZE, ActivationFunction.LEAKYRELU);
         layer1.setName("final_layer");
 
-        AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 10, BATCHSIZE, ActivationFunction.CESIGMOID);
+        AbstractLayer layer7 = new Layer(layer6.getNrOfOutputs(), 1, 1, BATCHSIZE, ActivationFunction.CESIGMOID);
         layer1.setName("final_layer");
+        
+        DemuxLayer demux = new DemuxLayer(10, BATCHSIZE, layer6, layer7 );
+        demux.setName("demux");
 
         LearningRate lrd = new LearningRateConst(LEARNING_RATE / BATCHSIZE);
-        DeepLayer dl = new DeepLayer(lrd, layer1, pl, convLayer2, pl2, fl, layer6, layer7);
+        DeepLayer dl = new DeepLayer(lrd, layer1, pl, convLayer2, pl2, fl, demux);
 
         dl.setCostFunction(new CrossEntropyCostFunction());
         Random r = new Random(System.currentTimeMillis());
@@ -109,6 +115,13 @@ public class TestFuzzyConvolutionDR {
             target.makeMaster();
 
             dl.train(i, image, target, TrainingMode.BATCH);
+
+            if (i % EPOCHTEST == 0) {
+
+                String epochFolder = weightFolder + "/epoch" + (1 + i / EPOCHTEST);
+                DigitRecognitionTester.testDigitRecognition(dl, epochFolder, BATCHSIZE, EPOCHTESTITERATION, r, true);
+
+            }
         }
         dl.sync();
         dl.analyzeWeights();
@@ -124,7 +137,7 @@ public class TestFuzzyConvolutionDR {
             origin = Paths.get(System.getProperty("user.home"), ".nn", weightFolder, "final.nn");
         }
         dlw.writeDeepLayer(origin, increment, dl);
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r, false);
     }
 
     public void testNeuralNet() {
@@ -135,7 +148,7 @@ public class TestFuzzyConvolutionDR {
 
         Random r = new java.util.Random();
         String weightFolder = "weights/" + dl.getTrainingStartTimeAsFolder();
-        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r);
+        DigitRecognitionTester.testDigitRecognition(dl, weightFolder, BATCHSIZE, TEST_ITERATIONS, r, true);
 
     }
 }

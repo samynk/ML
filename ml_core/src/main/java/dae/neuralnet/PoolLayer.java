@@ -4,6 +4,7 @@
  */
 package dae.neuralnet;
 
+import dae.matrix.Dimension;
 import dae.matrix.fmatrix;
 import dae.matrix.fmatrixview;
 import dae.matrix.imatrix;
@@ -33,6 +34,7 @@ public class PoolLayer implements ILayer {
     private final int batchSize;
 
     private final fmatrix inputs;
+    private final Dimension inputDimension;
     /**
      * The mask layer helps to propagate the deltas to the previous layer.
      */
@@ -52,6 +54,7 @@ public class PoolLayer implements ILayer {
     public PoolLayer(int iWidth, int iHeight, int iSlices, int scaleX, int scaleY, int batchSize) {
         this.scaleX = scaleX;
         this.scaleY = scaleY;
+        inputDimension = new Dimension(iHeight, iWidth, iSlices, batchSize);
         inputs = new fmatrix(iHeight, iWidth, iSlices, batchSize);
         maskLayer = new intmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
         outputs = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
@@ -59,6 +62,16 @@ public class PoolLayer implements ILayer {
         errors = new fmatrix(iHeight / scaleY, iWidth / scaleX, iSlices, batchSize);
         flatErrorView = new fmatrixview(errors.getHyperSliceSize(), 1, 1, errors);
         this.batchSize = batchSize;
+    }
+    
+     /**
+     * Duplicates this layer.
+     *
+     * @return the duplicated layer.
+     */
+    @Override
+    public ILayer duplicate() {
+        return new PoolLayer(inputDimension.c, inputDimension.r, inputDimension.s, scaleX, scaleY, batchSize);
     }
 
     /**
